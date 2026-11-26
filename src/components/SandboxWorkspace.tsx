@@ -38,11 +38,13 @@ interface SandboxWorkspaceProps {
   role: Role;
   activeModule: SandboxModule;
   activeTeacherId: string;
+  activeParentUserId: string;
   activeLearnerId: string;
   selectedLearnerId: string | null;
   onRoleChange: (role: Role) => void;
   onModuleChange: (module: SandboxModule) => void;
   onTeacherChange: (teacherId: string) => void;
+  onParentUserChange: (userId: string) => void;
   onLearnerChange: (learnerId: string) => void;
   onOpenLearnerPage: (learnerId: string) => void;
   onCloseLearnerPage: () => void;
@@ -68,7 +70,7 @@ const MODULE_TABS: { id: SandboxModule; label: string; roles: Role[] }[] = [
     roles: ['admin', 'teacher', 'parent'],
   },
   { id: 'coverage', label: 'Admin Coverage', roles: ['admin'] },
-  { id: 'schema', label: 'Schema Studio', roles: ['admin', 'teacher'] },
+  { id: 'schema', label: 'Schema Studio', roles: ['admin'] },
 ];
 
 const MOBILE_NAV_ITEMS: {
@@ -88,11 +90,13 @@ export function SandboxWorkspace({
   role,
   activeModule,
   activeTeacherId,
+  activeParentUserId,
   activeLearnerId,
   selectedLearnerId,
   onRoleChange,
   onModuleChange,
   onTeacherChange,
+  onParentUserChange,
   onLearnerChange,
   onOpenLearnerPage,
   onCloseLearnerPage,
@@ -105,8 +109,25 @@ export function SandboxWorkspace({
     ? activeModule
     : availableTabs[0].id;
 
+  const guardianAccounts = state.users.filter((u) => u.linkedLearnerIds.length > 0);
+  const activeGuardian =
+    guardianAccounts.find((u) => u.id === activeParentUserId) ??
+    guardianAccounts[0];
+  const guardianChildren = activeGuardian
+    ? state.learners.filter((l) =>
+        activeGuardian.linkedLearnerIds.includes(l.id)
+      )
+    : state.learners;
+  const resolvedActiveLearnerId = guardianChildren.some(
+    (l) => l.id === activeLearnerId
+  )
+    ? activeLearnerId
+    : (guardianChildren[0]?.id ?? activeLearnerId);
+
   const scopedSelectedLearnerId =
-    selectedLearnerId && role === 'parent' ? activeLearnerId : selectedLearnerId;
+    selectedLearnerId && role === 'parent'
+      ? resolvedActiveLearnerId
+      : selectedLearnerId;
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-5 pb-24 sm:px-6 sm:py-6 md:pb-8">
@@ -168,25 +189,50 @@ export function SandboxWorkspace({
             )}
 
             {role === 'parent' && (
-              <div className="flex items-center gap-2">
-                <label
-                  htmlFor="active-parent-select"
-                  className="text-xs font-medium text-slate-600"
-                >
-                  Parent / Child Scope
-                </label>
-                <select
-                  id="active-parent-select"
-                  value={activeLearnerId}
-                  onChange={(e) => onLearnerChange(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 focus:border-blue-700 focus:outline-none"
-                >
-                  {state.learners.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.parentName} (Child: {l.name})
-                    </option>
-                  ))}
-                </select>
+              <div className="flex flex-wrap items-center gap-2">
+                {guardianAccounts.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <label
+                      htmlFor="active-guardian-select"
+                      className="text-xs font-medium text-slate-600"
+                    >
+                      Guardian
+                    </label>
+                    <select
+                      id="active-guardian-select"
+                      value={activeGuardian?.id ?? ''}
+                      onChange={(e) => onParentUserChange(e.target.value)}
+                      className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:border-blue-700 focus:outline-none"
+                    >
+                      {guardianAccounts.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.displayName} ({u.linkedLearnerIds.length} child
+                          {u.linkedLearnerIds.length === 1 ? '' : 'ren'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5">
+                  <label
+                    htmlFor="active-parent-select"
+                    className="text-xs font-medium text-slate-600"
+                  >
+                    Child
+                  </label>
+                  <select
+                    id="active-parent-select"
+                    value={resolvedActiveLearnerId}
+                    onChange={(e) => onLearnerChange(e.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:border-blue-700 focus:outline-none"
+                  >
+                    {guardianChildren.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name} ({l.admissionNo})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
 
@@ -249,7 +295,8 @@ export function SandboxWorkspace({
               <LearnersDirectoryModule
                 state={state}
                 role={role}
-                activeLearnerId={activeLearnerId}
+                activeLearnerId={resolvedActiveLearnerId}
+                linkedLearnerIds={activeGuardian?.linkedLearnerIds}
                 onOpenLearnerPage={onOpenLearnerPage}
               />
             )}
@@ -257,7 +304,8 @@ export function SandboxWorkspace({
               <DiaryModule
                 state={state}
                 role={role}
-                activeLearnerId={activeLearnerId}
+                activeTeacherId={activeTeacherId}
+                activeLearnerId={resolvedActiveLearnerId}
                 onStateChange={onStateChange}
                 onOpenDiaryDialog={onOpenDiaryDialog}
                 onOpenLearnerPage={onOpenLearnerPage}
@@ -275,7 +323,7 @@ export function SandboxWorkspace({
               <AssessmentsModule
                 state={state}
                 role={role}
-                activeLearnerId={activeLearnerId}
+                activeLearnerId={resolvedActiveLearnerId}
                 onOpenAssessmentDialog={onOpenAssessmentDialog}
                 onOpenLearnerPage={onOpenLearnerPage}
               />
@@ -300,7 +348,7 @@ export function SandboxWorkspace({
                 state={state}
                 role={role}
                 activeTeacherId={activeTeacherId}
-                activeLearnerId={activeLearnerId}
+                activeLearnerId={resolvedActiveLearnerId}
                 onStateChange={onStateChange}
                 onOpenLearnerPage={onOpenLearnerPage}
               />
@@ -309,7 +357,11 @@ export function SandboxWorkspace({
               <AdminCoverageModule state={state} />
             )}
             {resolvedModule === 'schema' && (
-              <SchemaStudioModule state={state} onStateChange={onStateChange} />
+              <SchemaStudioModule
+                state={state}
+                role={role}
+                onStateChange={onStateChange}
+              />
             )}
           </>
         )}

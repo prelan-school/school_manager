@@ -26,7 +26,7 @@ Future<void> showAssessmentEntryDialog({
   String? error;
 
   final assessFields = state.dynamicFields
-      .where((f) => f.targetEntityType == EntityType.assessmentEntry)
+      .where((f) => !f.archived && f.targetEntityType == EntityType.assessmentEntry)
       .toList();
 
   await showDialog<void>(
@@ -46,8 +46,8 @@ Future<void> showAssessmentEntryDialog({
 
           return AlertDialog(
             title: const Text('Record Assessment (Pulled from Schemes)'),
-            content: SizedBox(
-              width: 500,
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -55,13 +55,19 @@ Future<void> showAssessmentEntryDialog({
                   children: [
                     DropdownButtonFormField<String>(
                       value: selectedLearnerId,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Learner',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
                       items: state.learners
-                          .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
+                          .map(
+                            (l) => DropdownMenuItem(
+                              value: l.id,
+                              child: Text(l.name, overflow: TextOverflow.ellipsis),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) {
                         if (v != null) setState(() => selectedLearnerId = v);
@@ -70,13 +76,19 @@ Future<void> showAssessmentEntryDialog({
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: selectedSubjectId,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Subject',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
                       items: state.subjects
-                          .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s.id,
+                              child: Text(s.name, overflow: TextOverflow.ellipsis),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) {
                         if (v != null) setState(() => selectedSubjectId = v);
@@ -85,6 +97,7 @@ Future<void> showAssessmentEntryDialog({
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: selectedStrandId.isEmpty ? null : selectedStrandId,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Strand (Linked)',
                         border: OutlineInputBorder(),
@@ -94,7 +107,10 @@ Future<void> showAssessmentEntryDialog({
                           .map(
                             (st) => DropdownMenuItem(
                               value: st.id,
-                              child: Text('${st.code}: ${st.title}'),
+                              child: Text(
+                                '${st.code}: ${st.title}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           )
                           .toList(),
@@ -105,6 +121,7 @@ Future<void> showAssessmentEntryDialog({
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: selectedSubstrandId.isEmpty ? null : selectedSubstrandId,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Substrand (Linked)',
                         border: OutlineInputBorder(),
@@ -114,7 +131,10 @@ Future<void> showAssessmentEntryDialog({
                           .map(
                             (sub) => DropdownMenuItem(
                               value: sub.id,
-                              child: Text('${sub.code}: ${sub.title}'),
+                              child: Text(
+                                '${sub.code}: ${sub.title}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           )
                           .toList(),
@@ -126,15 +146,22 @@ Future<void> showAssessmentEntryDialog({
                     Row(
                       children: [
                         Expanded(
+                          flex: 2,
                           child: DropdownButtonFormField<MasteryLevel>(
                             value: mastery,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Mastery',
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
                             items: MasteryLevel.values
-                                .map((m) => DropdownMenuItem(value: m, child: Text(m.label)))
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(m.label, overflow: TextOverflow.ellipsis),
+                                  ),
+                                )
                                 .toList(),
                             onChanged: (v) {
                               if (v != null) setState(() => mastery = v);
@@ -142,8 +169,8 @@ Future<void> showAssessmentEntryDialog({
                           ),
                         ),
                         const SizedBox(width: 12),
-                        SizedBox(
-                          width: 110,
+                        Expanded(
+                          flex: 1,
                           child: TextField(
                             controller: scoreCtrl,
                             keyboardType: TextInputType.number,

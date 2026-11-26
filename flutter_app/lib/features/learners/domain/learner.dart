@@ -10,6 +10,7 @@ class LearnerEntity {
     required this.registeredAt,
     required this.enrollmentStatus,
     required this.internalHealthNote,
+    this.customFields = const {},
   });
 
   final String id;
@@ -22,6 +23,30 @@ class LearnerEntity {
   final String registeredAt; // YYYY-MM-DD
   final String enrollmentStatus;
   final String internalHealthNote;
+  final Map<String, dynamic> customFields;
+
+  LearnerEntity copyWith({
+    String? name,
+    String? enrollmentStatus,
+    String? parentName,
+    String? guardianPhone,
+    String? internalHealthNote,
+    Map<String, dynamic>? customFields,
+  }) {
+    return LearnerEntity(
+      id: id,
+      name: name ?? this.name,
+      admissionNo: admissionNo,
+      classroomId: classroomId,
+      parentName: parentName ?? this.parentName,
+      parentEmail: parentEmail,
+      guardianPhone: guardianPhone ?? this.guardianPhone,
+      registeredAt: registeredAt,
+      enrollmentStatus: enrollmentStatus ?? this.enrollmentStatus,
+      internalHealthNote: internalHealthNote ?? this.internalHealthNote,
+      customFields: customFields ?? this.customFields,
+    );
+  }
 
   factory LearnerEntity.fromMap(String id, Map<String, dynamic> map) {
     return LearnerEntity(
@@ -35,8 +60,24 @@ class LearnerEntity {
       registeredAt: map['registeredAt'] as String? ?? '2025-09-01',
       enrollmentStatus: map['enrollmentStatus'] as String? ?? 'Active',
       internalHealthNote: map['internalHealthNote'] as String? ?? '',
+      customFields: Map<String, dynamic>.from(
+        map['customFields'] as Map<dynamic, dynamic>? ?? const {},
+      ),
     );
   }
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'admissionNo': admissionNo,
+        'classroomId': classroomId,
+        'parentName': parentName,
+        'parentEmail': parentEmail,
+        'guardianPhone': guardianPhone,
+        'registeredAt': registeredAt,
+        'enrollmentStatus': enrollmentStatus,
+        'internalHealthNote': internalHealthNote,
+        'customFields': customFields,
+      };
 }
 
 enum TimeframePreset {

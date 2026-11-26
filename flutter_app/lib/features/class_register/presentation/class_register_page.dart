@@ -40,6 +40,7 @@ class _ClassRegisterPageState extends ConsumerState<ClassRegisterPage> {
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 12,
+          runSpacing: 12,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,18 +55,48 @@ class _ClassRegisterPageState extends ConsumerState<ClassRegisterPage> {
               ],
             ),
             if (role != PortalRole.parent)
-              SizedBox(
-                width: 210,
-                child: DropdownButtonFormField<String>(
-                  value: _classroomId,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-                  items: ecs.classrooms
-                      .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => _classroomId = v);
-                  },
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 210),
+                    child: DropdownButtonFormField<String>(
+                      value: _classroomId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                      items: ecs.classrooms
+                          .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _classroomId = v);
+                      },
+                    ),
+                  ),
+                  if (canEdit)
+                    FilledButton.tonalIcon(
+                      onPressed: learners.isEmpty
+                          ? null
+                          : () async {
+                              final count = await ref
+                                  .read(schoolEcsProvider.notifier)
+                                  .markClassroomAllPresent(
+                                    classroomId: _classroomId,
+                                    teacherId: teacherId,
+                                    date: _date,
+                                  );
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Marked $count learners Present for $_date.'),
+                                ),
+                              );
+                            },
+                      icon: const Icon(Icons.done_all, size: 16),
+                      label: const Text('Mark All Present'),
+                    ),
+                ],
               ),
           ],
         ),
@@ -85,56 +116,59 @@ class _ClassRegisterPageState extends ConsumerState<ClassRegisterPage> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 12,
-              runSpacing: 10,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(learner.admissionNo, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
-                    InkWell(
-                      onTap: () => context.go('/learners/${learner.id}'),
-                      child: Text(
-                        learner.name,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1D4ED8)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(learner.admissionNo, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                      InkWell(
+                        onTap: () => context.go('/learners/${learner.id}'),
+                        child: Text(
+                          learner.name,
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1D4ED8)),
+                        ),
                       ),
-                    ),
-                    if (showUniform)
-                      Text(
-                        'Uniform (Staff Only): ${uniformOk ? 'Compliant' : 'Needs Follow-up'}',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-                      ),
-                  ],
+                      if (showUniform)
+                        Text(
+                          'Uniform (Staff Only): ${uniformOk ? 'Compliant' : 'Needs Follow-up'}',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                        ),
+                    ],
+                  ),
                 ),
-                if (canEdit)
-                  Wrap(
-                    spacing: 6,
-                    children: AttendanceStatus.values.map((st) {
-                      return ChoiceChip(
-                        label: Text(st.label, style: const TextStyle(fontSize: 11)),
-                        selected: status == st,
-                        onSelected: (_) {
-                          ref.read(schoolEcsProvider.notifier).upsertAttendance(
-                                AttendanceRecordEntity(
-                                  id: rec?.id ?? 'att_${learner.id}_$_date',
-                                  learnerId: learner.id,
-                                  classroomId: learner.classroomId,
-                                  teacherId: teacherId,
-                                  date: _date,
-                                  status: st,
-                                  remark: rec?.remark ?? 'Updated via Class Register.',
-                                  customFields: rec?.customFields ?? const {'uniform_compliant': true},
-                                ),
-                              );
-                        },
-                      );
-                    }).toList(),
-                  )
-                else
-                  Text(status.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: canEdit
+                      ? Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          alignment: WrapAlignment.end,
+                          children: AttendanceStatus.values.map((st) {
+                            return ChoiceChip(
+                              label: Text(st.label, style: const TextStyle(fontSize: 11)),
+                              selected: status == st,
+                              onSelected: (_) {
+                                ref.read(schoolEcsProvider.notifier).upsertAttendance(
+                                      AttendanceRecordEntity(
+                                        id: rec?.id ?? 'att_${learner.id}_$_date',
+                                        learnerId: learner.id,
+                                        classroomId: learner.classroomId,
+                                        teacherId: teacherId,
+                                        date: _date,
+                                        status: st,
+                                        remark: rec?.remark ?? 'Updated via Class Register.',
+                                        customFields: rec?.customFields ?? const {'uniform_compliant': true},
+                                      ),
+                                    );
+                              },
+                            );
+                          }).toList(),
+                        )
+                      : Text(status.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                ),
               ],
             ),
           );

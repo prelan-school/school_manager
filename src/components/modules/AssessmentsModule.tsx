@@ -18,7 +18,7 @@ export function AssessmentsModule({
   onOpenAssessmentDialog,
   onOpenLearnerPage,
 }: AssessmentsModuleProps) {
-  const assessFields = getFieldsForEntity(state, 'assessment_entry', role);
+  const assessFields = getFieldsForEntity(state, 'assessment_entry', role, true);
 
   const visibleAssessments =
     role === 'parent'

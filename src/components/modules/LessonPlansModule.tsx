@@ -1,8 +1,16 @@
 import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { createLessonPlan, updateLessonStatus } from '../../ecs/engine';
+import {
+  createLessonPlan,
+  getFieldsForEntity,
+  updateLessonStatus,
+} from '../../ecs/engine';
 import type { LessonStatus, Role, SchoolECSState } from '../../ecs/types';
 import { AppDialog } from '../AppDialog';
+import {
+  DynamicFieldInputs,
+  DynamicFieldReadout,
+} from '../DynamicFieldsRenderer';
 
 interface LessonPlansModuleProps {
   state: SchoolECSState;
@@ -28,9 +36,13 @@ export function LessonPlansModule({
   const [lessonsDelivered, setLessonsDelivered] = useState(2);
   const [status, setStatus] = useState<LessonStatus>('planned');
   const [reflectionNote, setReflectionNote] = useState('');
+  const [customFields, setCustomFields] = useState<
+    Record<string, string | number | boolean>
+  >({});
   const [error, setError] = useState<string | null>(null);
 
   const canEdit = role === 'admin' || role === 'teacher';
+  const lessonFields = getFieldsForEntity(state, 'lesson_plan', role);
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault();
@@ -44,6 +56,7 @@ export function LessonPlansModule({
       lessonsDelivered,
       status,
       reflectionNote,
+      customFields,
     });
     if (res.error) {
       setError(res.error);
@@ -52,6 +65,7 @@ export function LessonPlansModule({
     setError(null);
     setTitle('');
     setReflectionNote('');
+    setCustomFields({});
     onStateChange(res.state);
     setShowCreateDialog(false);
   };
@@ -244,6 +258,15 @@ export function LessonPlansModule({
             />
           </div>
 
+          <DynamicFieldInputs
+            fields={lessonFields}
+            values={customFields}
+            role={role}
+            onChange={(key, value) =>
+              setCustomFields((prev) => ({ ...prev, [key]: value }))
+            }
+          />
+
           {error && <p className="text-xs font-medium text-red-600">{error}</p>}
 
           <div className="flex justify-end gap-2 pt-2">
@@ -319,6 +342,12 @@ export function LessonPlansModule({
                   {lp.reflectionNote}
                 </p>
               )}
+
+              <DynamicFieldReadout
+                fields={lessonFields}
+                values={lp.customFields ?? {}}
+                role={role}
+              />
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
                 <span className="text-xs text-slate-500">

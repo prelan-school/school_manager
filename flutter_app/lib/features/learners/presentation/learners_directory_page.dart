@@ -23,6 +23,7 @@ class _LearnersDirectoryPageState extends ConsumerState<LearnersDirectoryPage> {
     final user = ref.watch(currentUserProvider).valueOrNull;
     final role = user?.role ?? PortalRole.admin;
     final ecs = ref.watch(schoolEcsProvider);
+    final selectedParentLearnerId = ref.watch(selectedParentLearnerIdProvider);
 
     final scopedLearners = role == PortalRole.parent
         ? ecs.learners.where((l) => user?.linkedLearnerIds.contains(l.id) ?? false).toList()
@@ -73,23 +74,32 @@ class _LearnersDirectoryPageState extends ConsumerState<LearnersDirectoryPage> {
                       onChanged: (v) => setState(() => _search = v),
                     ),
                   ),
-                  SizedBox(
-                    width: 190,
-                    child: DropdownButtonFormField<String>(
-                      value: _classroomId,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: [
-                        const DropdownMenuItem(value: 'all', child: Text('All Classrooms')),
-                        ...ecs.classrooms.map(
-                          (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 210),
+                      child: DropdownButtonFormField<String>(
+                        value: _classroomId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          isDense: true,
                         ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _classroomId = v);
-                      },
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All Classrooms', overflow: TextOverflow.ellipsis),
+                          ),
+                          ...ecs.classrooms.map(
+                            (c) => DropdownMenuItem(
+                              value: c.id,
+                              child: Text(c.name, overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _classroomId = v);
+                        },
+                      ),
                     ),
                   ),
                 ],
@@ -105,40 +115,53 @@ class _LearnersDirectoryPageState extends ConsumerState<LearnersDirectoryPage> {
             role,
             const LearnerTimeframe(preset: TimeframePreset.sinceRegistration),
           );
+          final isSelectedChild = role == PortalRole.parent &&
+              selectedParentLearnerId == learner.id;
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(
+                color: isSelectedChild
+                    ? const Color(0xFF2563EB)
+                    : const Color(0xFFE2E8F0),
+                width: isSelectedChild ? 1.5 : 1,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${learner.admissionNo} · ${classroom?.name ?? ''} · Registered ${learner.registeredAt}',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          learner.name,
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                        ),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${learner.admissionNo} · ${classroom?.name ?? ''} · Registered ${learner.registeredAt}',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            learner.name,
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
                     ),
-                    Text(
-                      learner.enrollmentStatus,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF15803D),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      flex: 0,
+                      child: Text(
+                        learner.enrollmentStatus,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF15803D),
+                        ),
                       ),
                     ),
                   ],
@@ -168,16 +191,27 @@ class _LearnersDirectoryPageState extends ConsumerState<LearnersDirectoryPage> {
                 ),
                 const Divider(height: 22),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Guardian: ${learner.parentName}',
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    Expanded(
+                      child: Text(
+                        'Guardian: ${learner.parentName}',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      ),
                     ),
-                    FilledButton.icon(
-                      onPressed: () => context.go('/learners/${learner.id}'),
-                      icon: const Icon(Icons.arrow_forward, size: 15),
-                      label: const Text('Open Learner Page'),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      flex: 0,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          if (role == PortalRole.parent) {
+                            ref.read(selectedParentLearnerIdProvider.notifier).state =
+                                learner.id;
+                          }
+                          context.go('/learners/${learner.id}');
+                        },
+                        icon: const Icon(Icons.arrow_forward, size: 15),
+                        label: const Text('Open Learner Page'),
+                      ),
                     ),
                   ],
                 ),

@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { INITIAL_ECS_STATE } from './initialData';
 import {
+  archiveDynamicField,
+  broadcastClassroomDiary,
   buildLearnerLongitudinalReport,
+  buildLearnerPrintableReportHtml,
+  computeSubjectMasteryProgression,
   computeSubstrandCoverage,
   computeTeacherCoverageSummaries,
   createAssessmentEntry,
@@ -10,12 +14,20 @@ import {
   createLessonPlan,
   getFieldsForEntity,
   getPageWidgetsForRole,
+  invitePortalUserAccount,
+  markClassroomAllPresent,
   registerDynamicField,
   registerSchemeStrand,
   registerSchemeSubstrand,
+  removeDynamicField,
+  restoreDynamicField,
   togglePageWidgetEnabled,
   togglePageWidgetRole,
+  updateDynamicField,
+  updateLearnerProfile,
   updateLessonStatus,
+  updatePortalUserAccount,
+  upsertTimetableSlot,
 } from './engine';
 
 test('dynamic field added to diary_entry is immediately queryable and persists in new entries', () => {
@@ -189,3 +201,184 @@ test('longitudinal learner report filters from registration date vs last 30 days
     )
   );
 });
+
+test('admin can perform full CRUD on component fields across learner and module entities', () => {
+  const created = registerDynamicField(INITIAL_ECS_STATE, {
+    label: 'Transport Bus Route',
+    targetEntityType: 'learner',
+    fieldType: 'text',
+    required: false,
+    visibleTo: ['admin', 'teacher', 'parent'],
+    editableBy: ['admin'],
+    description: 'Assigned afternoon school bus route.',
+  });
+  assert.ok(created.field);
+
+  const updated = updateDynamicField(created.state, created.field.id, {
+    label: 'School Bus Route',
+    fieldType: 'select',
+    options: ['Route A', 'Route B'],
+    required: true,
+    visibleTo: ['admin', 'parent'],
+  });
+  assert.ok(updated.field);
+  assert.equal(updated.field.key, 'school_bus_route');
+  assert.equal(updated.field.fieldType, 'select');
+  assert.deepEqual(updated.field.options, ['Route A', 'Route B']);
+
+  const savedLearner = updateLearnerProfile(updated.state, 'lrn_zuri', {
+    customFields: { school_bus_route: 'Route A' },
+  });
+  assert.equal(savedLearner.error, undefined);
+  assert.equal(
+    savedLearner.state.learners.find((l) => l.id === 'lrn_zuri')?.customFields
+      .school_bus_route,
+    'Route A'
+  );
+
+  const afterDelete = removeDynamicField(savedLearner.state, updated.field.id);
+  assert.ok(!afterDelete.dynamicFields.some((f) => f.id === updated.field!.id));
+});
+
+test('archiving a component schema hides it from active inputs while preserving historical readout labels', () => {
+  const archived = archiveDynamicField(INITIAL_ECS_STATE, 'df_diary_awards');
+  const activeDiaryFields = getFieldsForEntity(archived, 'diary_entry', 'teacher', false);
+  const readoutDiaryFields = getFieldsForEntity(archived, 'diary_entry', 'teacher', true);
+
+  assert.ok(!activeDiaryFields.some((f) => f.id === 'df_diary_awards'));
+  assert.ok(readoutDiaryFields.some((f) => f.id === 'df_diary_awards'));
+
+  const restored = restoreDynamicField(archived, 'df_diary_awards');
+  const afterRestore = getFieldsForEntity(restored, 'diary_entry', 'teacher', false);
+  assert.ok(afterRestore.some((f) => f.id === 'df_diary_awards'));
+});
+
+test('batch diary broadcast and mark-all-present register apply across classroom learners', () => {
+  const cls5aLearners = INITIAL_ECS_STATE.learners.filter(
+    (l) => l.classroomId === 'cls_5a'
+  );
+  const broadcast = broadcastClassroomDiary(INITIAL_ECS_STATE, {
+    classroomId: 'cls_5a',
+    teacherId: 'tch_amara',
+    date: '2026-11-26',
+    homeworkSummary: 'Review ratios worksheet',
+    teacherNote: 'Quiz tomorrow',
+    customFields: { awards: 'Teamwork Week' },
+    actorRole: 'teacher',
+  });
+  assert.equal(broadcast.error, undefined);
+  assert.equal(broadcast.entries.length, cls5aLearners.length);
+
+  const register = markClassroomAllPresent(broadcast.state, {
+    classroomId: 'cls_5a',
+    teacherId: 'tch_amara',
+    date: '2026-11-26',
+  });
+  assert.equal(register.error, undefined);
+  assert.equal(register.count, cls5aLearners.length);
+  for (const lrn of cls5aLearners) {
+    const rec = register.state.attendanceRecords.find(
+      (r) => r.learnerId === lrn.id && r.date === '2026-11-26'
+    );
+    assert.equal(rec?.status, 'present');
+  }
+});
+
+test('timetable slot validation blocks classroom, teacher, and room conflicts on the same day/period', () => {
+  // Classroom cls_5a already has Mon P1
+  const clsConflict = upsertTimetableSlot(INITIAL_ECS_STATE, {
+    classroomId: 'cls_5a',
+    subjectId: 'sub_eng5',
+    teacherId: 'tch_david',
+    day: 'Mon',
+    period: 1,
+    timeRange: '08:00 - 08:45',
+    room: 'B2-99',
+  });
+  assert.ok(clsConflict.error?.includes('Classroom'));
+
+  // Teacher tch_amara already teaches Mon P1
+  const teacherConflict = upsertTimetableSlot(INITIAL_ECS_STATE, {
+    classroomId: 'cls_6b',
+    subjectId: 'sub_math5',
+    teacherId: 'tch_amara',
+    day: 'Mon',
+    period: 1,
+    timeRange: '08:00 - 08:45',
+    room: 'B2-08',
+  });
+  assert.ok(teacherConflict.error?.includes('Teacher'));
+
+  // Room B2-04 already booked Mon P1
+  const roomConflict = upsertTimetableSlot(INITIAL_ECS_STATE, {
+    classroomId: 'cls_6b',
+    subjectId: 'sub_eng5',
+    teacherId: 'tch_david',
+    day: 'Mon',
+    period: 1,
+    timeRange: '08:00 - 08:45',
+    room: 'b2-04',
+  });
+  assert.ok(roomConflict.error?.includes('Room'));
+
+  // Non-conflicting slot succeeds
+  const valid = upsertTimetableSlot(INITIAL_ECS_STATE, {
+    classroomId: 'cls_6b',
+    subjectId: 'sub_eng5',
+    teacherId: 'tch_david',
+    day: 'Mon',
+    period: 1,
+    timeRange: '08:00 - 08:45',
+    room: 'B2-08',
+  });
+  assert.equal(valid.error, undefined);
+  assert.ok(valid.slot);
+});
+
+test('admin can invite staff/guardians and manage multi-child linkedLearnerIds', () => {
+  const invited = invitePortalUserAccount(INITIAL_ECS_STATE, {
+    email: 'kwame.mensah@family.org',
+    displayName: 'Kwame Mensah',
+    role: 'parent',
+    linkedLearnerIds: ['lrn_liam', 'lrn_nadia'],
+  });
+  assert.equal(invited.error, undefined);
+  assert.ok(invited.user);
+  assert.deepEqual(invited.user.linkedLearnerIds, ['lrn_liam', 'lrn_nadia']);
+
+  const promoted = updatePortalUserAccount(invited.state, invited.user.id, {
+    role: 'teacher',
+    teacherId: 'tch_david',
+    linkedLearnerIds: ['lrn_liam'],
+  });
+  assert.equal(promoted.error, undefined);
+  assert.equal(promoted.user?.role, 'teacher');
+  assert.equal(promoted.user?.teacherId, 'tch_david');
+  assert.deepEqual(promoted.user?.linkedLearnerIds, ['lrn_liam']);
+});
+
+test('subject mastery progression and printable HTML report escape special characters safely', () => {
+  const progression = computeSubjectMasteryProgression(
+    INITIAL_ECS_STATE,
+    'lrn_zuri'
+  );
+  const mathSeries = progression.find((s) => s.subject.id === 'sub_math5');
+  assert.ok(mathSeries);
+  assert.equal(mathSeries.points.length, 2);
+  assert.equal(mathSeries.latestScore, 92);
+  assert.equal(mathSeries.deltaFromFirst, 18);
+
+  const injected = updateLearnerProfile(INITIAL_ECS_STATE, 'lrn_zuri', {
+    name: 'Zuri <script>alert(1)</script>',
+  });
+  const html = buildLearnerPrintableReportHtml(
+    injected.state,
+    'lrn_zuri',
+    'parent',
+    { preset: 'since_registration' }
+  );
+  assert.ok(html);
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('&lt;script&gt;'));
+});
+

@@ -22,6 +22,8 @@ class SchoolEcsState {
     required this.lessonPlans,
     required this.timetableSlots,
     required this.attendanceRecords,
+    this.isLiveSynced = false,
+    this.syncError,
   });
 
   final List<SubjectEntity> subjects;
@@ -37,8 +39,14 @@ class SchoolEcsState {
   final List<LessonPlanEntity> lessonPlans;
   final List<TimetableSlotEntity> timetableSlots;
   final List<AttendanceRecordEntity> attendanceRecords;
+  final bool isLiveSynced;
+  final String? syncError;
 
   SchoolEcsState copyWith({
+    List<SubjectEntity>? subjects,
+    List<ClassroomEntity>? classrooms,
+    List<TeacherEntity>? teachers,
+    List<LearnerEntity>? learners,
     List<DynamicFieldDefinition>? dynamicFields,
     List<PageWidgetDefinition>? pageWidgets,
     List<SchemeStrandEntity>? strands,
@@ -46,13 +54,16 @@ class SchoolEcsState {
     List<DiaryEntryEntity>? diaryEntries,
     List<AssessmentEntryEntity>? assessments,
     List<LessonPlanEntity>? lessonPlans,
+    List<TimetableSlotEntity>? timetableSlots,
     List<AttendanceRecordEntity>? attendanceRecords,
+    bool? isLiveSynced,
+    String? syncError,
   }) {
     return SchoolEcsState(
-      subjects: subjects,
-      classrooms: classrooms,
-      teachers: teachers,
-      learners: learners,
+      subjects: subjects ?? this.subjects,
+      classrooms: classrooms ?? this.classrooms,
+      teachers: teachers ?? this.teachers,
+      learners: learners ?? this.learners,
       dynamicFields: dynamicFields ?? this.dynamicFields,
       pageWidgets: pageWidgets ?? this.pageWidgets,
       strands: strands ?? this.strands,
@@ -60,8 +71,10 @@ class SchoolEcsState {
       diaryEntries: diaryEntries ?? this.diaryEntries,
       assessments: assessments ?? this.assessments,
       lessonPlans: lessonPlans ?? this.lessonPlans,
-      timetableSlots: timetableSlots,
+      timetableSlots: timetableSlots ?? this.timetableSlots,
       attendanceRecords: attendanceRecords ?? this.attendanceRecords,
+      isLiveSynced: isLiveSynced ?? this.isLiveSynced,
+      syncError: syncError,
     );
   }
 }

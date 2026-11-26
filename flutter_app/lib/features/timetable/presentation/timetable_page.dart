@@ -32,13 +32,14 @@ class _TimetablePageState extends ConsumerState<TimetablePage> {
 
           return AlertDialog(
             title: Text('${slot.day} Period ${slot.period} · ${subj?.name ?? ''}'),
-            content: SizedBox(
-              width: 440,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${slot.timeRange} · Room ${slot.room} · ${teacher?.name ?? ''}'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${slot.timeRange} · Room ${slot.room} · ${teacher?.name ?? ''}'),
                   const Divider(height: 22),
                   if (plan == null)
                     const Text('No Lesson Plan linked to this period yet.')
@@ -81,6 +82,7 @@ class _TimetablePageState extends ConsumerState<TimetablePage> {
                 ],
               ),
             ),
+            ),
             actions: [
               FilledButton(
                 onPressed: () => Navigator.of(dialogCtx).pop(),
@@ -89,6 +91,200 @@ class _TimetablePageState extends ConsumerState<TimetablePage> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _openCreateSlotDialog() async {
+    final ecs = ref.read(schoolEcsProvider);
+    if (ecs.subjects.isEmpty || ecs.teachers.isEmpty) return;
+
+    var classroomId = _classroomId;
+    var subjectId = ecs.subjects.first.id;
+    var teacherId = ecs.teachers.first.id;
+    var day = 'Mon';
+    var period = 2;
+    final timeCtrl = TextEditingController(text: '09:00 - 09:45');
+    final roomCtrl = TextEditingController(text: '5A-101');
+    String? error;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: const Text('Add Timetable Slot'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: classroomId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Classroom',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: ecs.classrooms
+                        .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setModalState(() => classroomId = v);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: day,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Day',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+                              .map((d) => DropdownMenuItem(value: d, child: Text(d)))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setModalState(() => day = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          value: period,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Period',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const [1, 2, 3, 4, 5, 6]
+                              .map((p) => DropdownMenuItem(value: p, child: Text('Period $p')))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setModalState(() => period = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: subjectId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Subject',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: ecs.subjects
+                        .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setModalState(() => subjectId = v);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: teacherId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Teacher',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: ecs.teachers
+                        .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setModalState(() => teacherId = v);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: timeCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Time Range *',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 1,
+                        child: TextField(
+                          controller: roomCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Room *',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Text(
+                        error!,
+                        style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final conflictError = await ref
+                    .read(schoolEcsProvider.notifier)
+                    .upsertTimetableSlot(
+                      TimetableSlotEntity(
+                        id: 'tt_${DateTime.now().millisecondsSinceEpoch}',
+                        classroomId: classroomId,
+                        subjectId: subjectId,
+                        teacherId: teacherId,
+                        day: day,
+                        period: period,
+                        timeRange: timeCtrl.text.trim(),
+                        room: roomCtrl.text.trim(),
+                      ),
+                    );
+                if (conflictError != null) {
+                  setModalState(() => error = conflictError);
+                  return;
+                }
+                if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+              },
+              child: const Text('Save Slot'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -108,6 +304,7 @@ class _TimetablePageState extends ConsumerState<TimetablePage> {
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 12,
+          runSpacing: 12,
           children: [
             const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,18 +316,32 @@ class _TimetablePageState extends ConsumerState<TimetablePage> {
                 ),
               ],
             ),
-            SizedBox(
-              width: 210,
-              child: DropdownButtonFormField<String>(
-                value: _classroomId,
-                decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-                items: ecs.classrooms
-                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _classroomId = v);
-                },
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 210),
+                  child: DropdownButtonFormField<String>(
+                    value: _classroomId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                    items: ecs.classrooms
+                        .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _classroomId = v);
+                    },
+                  ),
+                ),
+                if (role == PortalRole.admin)
+                  FilledButton.icon(
+                    onPressed: _openCreateSlotDialog,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Slot'),
+                  ),
+              ],
             ),
           ],
         ),

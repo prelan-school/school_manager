@@ -53,11 +53,23 @@ class SchoolDiaryPage extends ConsumerWidget {
             if (role != PortalRole.parent)
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
+                  if (role == PortalRole.admin)
+                    OutlinedButton.icon(
+                      onPressed: () => showAddDiaryFieldDialog(context: context, ref: ref),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add Custom Field'),
+                    ),
                   OutlinedButton.icon(
-                    onPressed: () => showAddDiaryFieldDialog(context: context, ref: ref),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Custom Field'),
+                    onPressed: () => showBroadcastDiaryDialog(
+                      context: context,
+                      ref: ref,
+                      role: role,
+                      teacherId: user?.teacherId ?? ecs.teachers.first.id,
+                    ),
+                    icon: const Icon(Icons.campaign_outlined, size: 16),
+                    label: const Text('Broadcast to Class'),
                   ),
                   FilledButton.icon(
                     onPressed: () => showDiaryEntryDialog(
@@ -117,26 +129,29 @@ class SchoolDiaryPage extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    if (role == PortalRole.parent)
-                      FilledButton.tonal(
-                        onPressed: () => ref
-                            .read(schoolEcsProvider.notifier)
-                            .toggleDiaryAcknowledgment(entry.id),
-                        child: Text(
-                          entry.parentAcknowledged ? 'Acknowledged' : 'Acknowledge',
-                        ),
-                      )
-                    else
-                      Text(
-                        entry.parentAcknowledged ? 'Parent Signed' : 'Awaiting Sign-off',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: entry.parentAcknowledged
-                              ? const Color(0xFF15803D)
-                              : const Color(0xFFB45309),
-                        ),
-                      ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      flex: 0,
+                      child: role == PortalRole.parent
+                          ? FilledButton.tonal(
+                              onPressed: () => ref
+                                  .read(schoolEcsProvider.notifier)
+                                  .toggleDiaryAcknowledgment(entry.id),
+                              child: Text(
+                                entry.parentAcknowledged ? 'Acknowledged' : 'Acknowledge',
+                              ),
+                            )
+                          : Text(
+                              entry.parentAcknowledged ? 'Parent Signed' : 'Awaiting Sign-off',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: entry.parentAcknowledged
+                                    ? const Color(0xFF15803D)
+                                    : const Color(0xFFB45309),
+                              ),
+                            ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),

@@ -1,13 +1,24 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Plus, SlidersHorizontal } from 'lucide-react';
-import { useState } from 'react';
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  Download,
+  Pencil,
+  Plus,
+  SlidersHorizontal,
+} from 'lucide-react';
+import { useState, type FormEvent } from 'react';
 import {
   buildLearnerLongitudinalReport,
+  buildLearnerPrintableReportHtml,
+  computeSubjectMasteryProgression,
   getFieldsForEntity,
   getPageWidgetsForRole,
   movePageWidget,
   toggleDiaryAcknowledgment,
   togglePageWidgetEnabled,
   togglePageWidgetRole,
+  updateLearnerProfile,
 } from '../ecs/engine';
 import type {
   LearnerTimeframe,
@@ -17,7 +28,10 @@ import type {
   TimeframePreset,
 } from '../ecs/types';
 import { AppDialog } from './AppDialog';
-import { DynamicFieldReadout } from './DynamicFieldsRenderer';
+import {
+  DynamicFieldInputs,
+  DynamicFieldReadout,
+} from './DynamicFieldsRenderer';
 
 interface LearnerProfilePageProps {
   state: SchoolECSState;
@@ -42,9 +56,20 @@ export function LearnerProfilePage({
   const [customFrom, setCustomFrom] = useState('2025-09-01');
   const [customTo, setCustomTo] = useState('2026-11-25');
   const [showLayoutDialog, setShowLayoutDialog] = useState(false);
+  const [showEditLearnerDialog, setShowEditLearnerDialog] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editStatus, setEditStatus] = useState<'Active' | 'Probation' | 'Alumni'>('Active');
+  const [editParentName, setEditParentName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editHealthNote, setEditHealthNote] = useState('');
+  const [editCustomFields, setEditCustomFields] = useState<
+    Record<string, string | number | boolean>
+  >({});
+  const [editError, setEditError] = useState<string | null>(null);
   const [timelineFilter, setTimelineFilter] = useState<
     'all' | 'diary' | 'assessment' | 'attendance'
   >('all');
+  const [reportExported, setReportExported] = useState(false);
 
   const timeframe: LearnerTimeframe = {
     preset,
@@ -73,13 +98,77 @@ export function LearnerProfilePage({
   }
 
   const { learner, bounds } = report;
+  const subjectProgression = computeSubjectMasteryProgression(
+    state,
+    learner.id,
+    bounds.from,
+    bounds.to
+  );
   const classroom = state.classrooms.find((c) => c.id === learner.classroomId);
-  const diaryFields = getFieldsForEntity(state, 'diary_entry', role);
-  const assessFields = getFieldsForEntity(state, 'assessment_entry', role);
-  const registerFields = getFieldsForEntity(state, 'attendance_record', role);
+  const activeLearnerFields = getFieldsForEntity(state, 'learner', role, false);
+  const learnerReadoutFields = getFieldsForEntity(state, 'learner', role, true);
+  const diaryFields = getFieldsForEntity(state, 'diary_entry', role, true);
+  const assessFields = getFieldsForEntity(state, 'assessment_entry', role, true);
+  const registerFields = getFieldsForEntity(
+    state,
+    'attendance_record',
+    role,
+    true
+  );
   const showUniformCheck = registerFields.some(
     (f) => f.key === 'uniform_compliant'
   );
+
+  const handleExportTermReport = () => {
+    const html = buildLearnerPrintableReportHtml(
+      state,
+      learner.id,
+      role,
+      timeframe
+    );
+    if (!html) return;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${learner.admissionNo.toLowerCase()}-term-report.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setReportExported(true);
+    setTimeout(() => setReportExported(false), 3000);
+  };
+
+  const openEditLearnerDialog = () => {
+    setEditName(learner.name);
+    setEditStatus(learner.enrollmentStatus);
+    setEditParentName(learner.parentName);
+    setEditPhone(learner.guardianPhone);
+    setEditHealthNote(learner.internalHealthNote);
+    setEditCustomFields({ ...learner.customFields });
+    setEditError(null);
+    setShowEditLearnerDialog(true);
+  };
+
+  const handleSaveLearnerProfile = (e: FormEvent) => {
+    e.preventDefault();
+    const res = updateLearnerProfile(state, learner.id, {
+      name: editName,
+      enrollmentStatus: editStatus,
+      parentName: editParentName,
+      guardianPhone: editPhone,
+      internalHealthNote: editHealthNote,
+      customFields: editCustomFields,
+    });
+    if (res.error) {
+      setEditError(res.error);
+      return;
+    }
+    setEditError(null);
+    onStateChange(res.state);
+    setShowEditLearnerDialog(false);
+  };
 
   const filteredTimeline =
     timelineFilter === 'all'
@@ -92,46 +181,57 @@ export function LearnerProfilePage({
     switch (widgetId) {
       case 'learner_overview':
         return (
-          <section
-            key={widgetId}
-            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
-          >
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500">Registered Since</p>
-              <p className="mt-1 font-mono text-lg font-bold text-slate-900 tabular-nums">
-                {learner.registeredAt}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Status: {learner.enrollmentStatus}
-              </p>
+          <section key={widgetId} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs text-slate-500">Registered Since</p>
+                <p className="mt-1 font-mono text-lg font-bold text-slate-900 tabular-nums">
+                  {learner.registeredAt}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Status: {learner.enrollmentStatus}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs text-slate-500">Average Assessment</p>
+                <p className="mt-1 font-mono text-2xl font-bold text-blue-700 tabular-nums">
+                  {report.averageScore !== null ? `${report.averageScore}%` : '—'}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {report.assessments.length} evaluations in range
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs text-slate-500">Attendance Rate</p>
+                <p className="mt-1 font-mono text-2xl font-bold text-emerald-700 tabular-nums">
+                  {report.attendanceRate !== null ? `${report.attendanceRate}%` : '—'}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {report.attendance.length} register logs in range
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs text-slate-500">Diary Awards &amp; Logs</p>
+                <p className="mt-1 font-mono text-2xl font-bold text-slate-900 tabular-nums">
+                  {report.awardsCount} / {report.diary.length}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Awards out of diary entries
+                </p>
+              </div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500">Average Assessment</p>
-              <p className="mt-1 font-mono text-2xl font-bold text-blue-700 tabular-nums">
-                {report.averageScore !== null ? `${report.averageScore}%` : '—'}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {report.assessments.length} evaluations in range
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500">Attendance Rate</p>
-              <p className="mt-1 font-mono text-2xl font-bold text-emerald-700 tabular-nums">
-                {report.attendanceRate !== null ? `${report.attendanceRate}%` : '—'}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {report.attendance.length} register logs in range
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500">Diary Awards &amp; Logs</p>
-              <p className="mt-1 font-mono text-2xl font-bold text-slate-900 tabular-nums">
-                {report.awardsCount} / {report.diary.length}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Awards out of diary entries
-              </p>
-            </div>
+            {learnerReadoutFields.some((f) => {
+              const v = learner.customFields[f.key];
+              return v !== undefined && v !== null && String(v).trim() !== '';
+            }) && (
+              <div className="rounded-xl border border-slate-200 bg-white px-5 pb-4 pt-1">
+                <DynamicFieldReadout
+                  fields={learnerReadoutFields}
+                  values={learner.customFields}
+                  role={role}
+                />
+              </div>
+            )}
           </section>
         );
 
@@ -226,6 +326,99 @@ export function LearnerProfilePage({
                 </button>
               )}
             </div>
+
+            {subjectProgression.length > 0 && (
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-xs font-semibold text-slate-800">
+                    Subject Mastery Progression
+                  </h4>
+                  <span className="text-[11px] text-slate-500">
+                    Chronological scores across {bounds.from} &rarr; {bounds.to}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {subjectProgression.map((series) => {
+                    const width = 220;
+                    const height = 56;
+                    const pts = series.points;
+                    const coords = pts.map((pt, i) => {
+                      const x =
+                        pts.length === 1
+                          ? width / 2
+                          : 12 + (i / (pts.length - 1)) * (width - 24);
+                      const y =
+                        height - 10 - ((pt.scorePercent / 100) * (height - 20));
+                      return { x, y, pt };
+                    });
+                    const polyPoints = coords
+                      .map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`)
+                      .join(' ');
+                    const deltaPrefix = series.deltaFromFirst >= 0 ? '+' : '';
+                    return (
+                      <div
+                        key={series.subject.id}
+                        className="rounded-lg border border-slate-200 bg-white p-3"
+                      >
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-900">
+                            {series.subject.name}
+                          </span>
+                          <span className="font-mono text-xs font-bold text-blue-700 tabular-nums">
+                            {series.latestScore}%{' '}
+                            <span
+                              className={
+                                series.deltaFromFirst >= 0
+                                  ? 'text-emerald-700'
+                                  : 'text-amber-700'
+                              }
+                            >
+                              ({deltaPrefix}
+                              {series.deltaFromFirst}%)
+                            </span>
+                          </span>
+                        </div>
+                        <svg
+                          viewBox={`0 0 ${width} ${height}`}
+                          className="mt-2 h-14 w-full"
+                          role="img"
+                          aria-label={`${series.subject.name} mastery progression`}
+                        >
+                          <line
+                            x1="0"
+                            y1={height - 10}
+                            x2={width}
+                            y2={height - 10}
+                            stroke="#e2e8f0"
+                            strokeWidth="1"
+                          />
+                          {coords.length > 1 && (
+                            <polyline
+                              fill="none"
+                              stroke="#1d4ed8"
+                              strokeWidth="2"
+                              points={polyPoints}
+                            />
+                          )}
+                          {coords.map((c, idx) => (
+                            <circle
+                              key={`${c.pt.date}_${idx}`}
+                              cx={c.x}
+                              cy={c.y}
+                              r="3.5"
+                              fill="#1d4ed8"
+                            />
+                          ))}
+                        </svg>
+                        <p className="mt-1 truncate text-[11px] text-slate-500">
+                          {pts.map((p) => `${p.date.slice(5)}: ${p.scorePercent}%`).join(' · ')}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {report.assessments.length === 0 ? (
               <p className="py-5 text-xs text-slate-500">
@@ -493,6 +686,11 @@ export function LearnerProfilePage({
                 </dd>
               </div>
             </dl>
+            <DynamicFieldReadout
+              fields={learnerReadoutFields}
+              values={learner.customFields}
+              role={role}
+            />
           </section>
         );
     }
@@ -524,15 +722,33 @@ export function LearnerProfilePage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportTermReport}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 whitespace-nowrap shrink-0"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              {reportExported ? 'Report Downloaded' : 'Export Term Report'}
+            </button>
             {role === 'admin' && (
-              <button
-                type="button"
-                onClick={() => setShowLayoutDialog(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 whitespace-nowrap shrink-0"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                Configure Page Widgets
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={openEditLearnerDialog}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 whitespace-nowrap shrink-0"
+                >
+                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  Edit Learner Fields
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowLayoutDialog(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 whitespace-nowrap shrink-0"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                  Configure Page Widgets
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -693,6 +909,134 @@ export function LearnerProfilePage({
               </div>
             ))}
         </div>
+      </AppDialog>
+
+      {/* Admin Edit Learner Profile & Dynamic Fields Dialog */}
+      <AppDialog
+        open={showEditLearnerDialog}
+        title="Edit Learner Profile & Dynamic Fields"
+        subtitle="Update core registration dossier and Admin-defined learner component fields."
+        onClose={() => setShowEditLearnerDialog(false)}
+      >
+        <form onSubmit={handleSaveLearnerProfile} className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="edit-lrn-name"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Learner Name *
+              </label>
+              <input
+                id="edit-lrn-name"
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="edit-lrn-status"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Enrollment Status
+              </label>
+              <select
+                id="edit-lrn-status"
+                value={editStatus}
+                onChange={(e) =>
+                  setEditStatus(
+                    e.target.value as 'Active' | 'Probation' | 'Alumni'
+                  )
+                }
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              >
+                <option value="Active">Active</option>
+                <option value="Probation">Probation</option>
+                <option value="Alumni">Alumni</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="edit-lrn-parent"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Guardian Name
+              </label>
+              <input
+                id="edit-lrn-parent"
+                type="text"
+                value={editParentName}
+                onChange={(e) => setEditParentName(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="edit-lrn-phone"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Guardian Phone
+              </label>
+              <input
+                id="edit-lrn-phone"
+                type="text"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="edit-lrn-health"
+              className="mb-1 block text-xs font-medium text-slate-700"
+            >
+              Internal Staff Health Note
+            </label>
+            <textarea
+              id="edit-lrn-health"
+              rows={2}
+              value={editHealthNote}
+              onChange={(e) => setEditHealthNote(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+            />
+          </div>
+
+          <DynamicFieldInputs
+            fields={activeLearnerFields}
+            values={editCustomFields}
+            role={role}
+            onChange={(key, value) =>
+              setEditCustomFields((prev) => ({ ...prev, [key]: value }))
+            }
+          />
+
+          {editError && (
+            <p className="text-xs font-medium text-red-600">{editError}</p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowEditLearnerDialog(false)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+            >
+              Save Learner Profile
+            </button>
+          </div>
+        </form>
       </AppDialog>
     </div>
   );

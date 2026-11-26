@@ -66,6 +66,7 @@ class DynamicFieldDefinition {
     required this.visibleTo,
     required this.editableBy,
     required this.description,
+    this.archived = false,
   });
 
   final String id;
@@ -78,9 +79,37 @@ class DynamicFieldDefinition {
   final List<PortalRole> visibleTo;
   final List<PortalRole> editableBy;
   final String description;
+  final bool archived;
 
   bool isVisibleTo(PortalRole role) => visibleTo.contains(role);
   bool isEditableBy(PortalRole role) => editableBy.contains(role);
+
+  DynamicFieldDefinition copyWith({
+    EntityType? targetEntityType,
+    String? key,
+    String? label,
+    DynamicFieldType? fieldType,
+    List<String>? options,
+    bool? required,
+    List<PortalRole>? visibleTo,
+    List<PortalRole>? editableBy,
+    String? description,
+    bool? archived,
+  }) {
+    return DynamicFieldDefinition(
+      id: id,
+      targetEntityType: targetEntityType ?? this.targetEntityType,
+      key: key ?? this.key,
+      label: label ?? this.label,
+      fieldType: fieldType ?? this.fieldType,
+      options: options ?? this.options,
+      required: required ?? this.required,
+      visibleTo: visibleTo ?? this.visibleTo,
+      editableBy: editableBy ?? this.editableBy,
+      description: description ?? this.description,
+      archived: archived ?? this.archived,
+    );
+  }
 
   factory DynamicFieldDefinition.fromMap(String id, Map<String, dynamic> map) {
     return DynamicFieldDefinition(
@@ -98,6 +127,7 @@ class DynamicFieldDefinition {
           .map((e) => PortalRole.fromKey(e as String?))
           .toList(),
       description: map['description'] as String? ?? '',
+      archived: map['archived'] as bool? ?? false,
     );
   }
 
@@ -111,6 +141,7 @@ class DynamicFieldDefinition {
         'visibleTo': visibleTo.map((r) => r.key).toList(),
         'editableBy': editableBy.map((r) => r.key).toList(),
         'description': description,
+        'archived': archived,
       };
 }
 
@@ -203,6 +234,19 @@ class SubjectEntity {
   final String id;
   final String code;
   final String name;
+
+  factory SubjectEntity.fromMap(String id, Map<String, dynamic> map) {
+    return SubjectEntity(
+      id: id,
+      code: map['code'] as String? ?? '',
+      name: map['name'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'code': code,
+        'name': name,
+      };
 }
 
 class ClassroomEntity {
@@ -215,6 +259,19 @@ class ClassroomEntity {
   final String id;
   final String name;
   final String gradeLevel;
+
+  factory ClassroomEntity.fromMap(String id, Map<String, dynamic> map) {
+    return ClassroomEntity(
+      id: id,
+      name: map['name'] as String? ?? '',
+      gradeLevel: map['gradeLevel'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'gradeLevel': gradeLevel,
+      };
 }
 
 class TeacherEntity {
@@ -229,6 +286,21 @@ class TeacherEntity {
   final String name;
   final String email;
   final List<String> subjectIds;
+
+  factory TeacherEntity.fromMap(String id, Map<String, dynamic> map) {
+    return TeacherEntity(
+      id: id,
+      name: map['name'] as String? ?? '',
+      email: map['email'] as String? ?? '',
+      subjectIds: List<String>.from(map['subjectIds'] as List<dynamic>? ?? const []),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'email': email,
+        'subjectIds': subjectIds,
+      };
 }
 
 String slugifyFieldKey(String label) {

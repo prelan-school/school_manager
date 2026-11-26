@@ -12,12 +12,17 @@ import type {
   MasteryLevel,
   PageWidgetDefinition,
   PageWidgetId,
+  PortalUserAccount,
   Role,
   SchemeStrandEntity,
   SchemeSubstrandEntity,
   SchoolECSState,
+  SubjectMasteryPoint,
+  SubjectMasterySeries,
   SubstrandCoverageReport,
   TeacherCoverageSummary,
+  TimetableSlotEntity,
+  Weekday,
 } from './types';
 
 export function sanitizeFieldKey(label: string): string {
@@ -64,6 +69,78 @@ export function registerDynamicField(
   };
 }
 
+export function updateDynamicField(
+  state: SchoolECSState,
+  fieldId: string,
+  updates: Partial<
+    Pick<
+      DynamicFieldDefinition,
+      | 'label'
+      | 'targetEntityType'
+      | 'fieldType'
+      | 'options'
+      | 'required'
+      | 'visibleTo'
+      | 'editableBy'
+      | 'description'
+    >
+  >
+): { state: SchoolECSState; field?: DynamicFieldDefinition; error?: string } {
+  const existing = state.dynamicFields.find((f) => f.id === fieldId);
+  if (!existing) {
+    return { state, error: 'Component field not found.' };
+  }
+  const nextLabel = (updates.label ?? existing.label).trim();
+  if (!nextLabel) {
+    return { state, error: 'Field label is required.' };
+  }
+  const nextTarget = updates.targetEntityType ?? existing.targetEntityType;
+  const nextKey = sanitizeFieldKey(nextLabel);
+  if (!nextKey) {
+    return { state, error: 'Field label must contain alphanumeric characters.' };
+  }
+  const duplicate = state.dynamicFields.some(
+    (f) =>
+      f.id !== fieldId &&
+      f.targetEntityType === nextTarget &&
+      f.key === nextKey
+  );
+  if (duplicate) {
+    return {
+      state,
+      error: `Another field "${nextKey}" already exists on ${nextTarget}.`,
+    };
+  }
+
+  const nextField: DynamicFieldDefinition = {
+    ...existing,
+    ...updates,
+    label: nextLabel,
+    key: nextKey,
+    targetEntityType: nextTarget,
+    visibleTo: updates.visibleTo
+      ? updates.visibleTo.includes('admin')
+        ? updates.visibleTo
+        : ['admin', ...updates.visibleTo]
+      : existing.visibleTo,
+    editableBy: updates.editableBy
+      ? updates.editableBy.includes('admin')
+        ? updates.editableBy
+        : ['admin', ...updates.editableBy]
+      : existing.editableBy,
+  };
+
+  return {
+    state: {
+      ...state,
+      dynamicFields: state.dynamicFields.map((f) =>
+        f.id === fieldId ? nextField : f
+      ),
+    },
+    field: nextField,
+  };
+}
+
 export function removeDynamicField(
   state: SchoolECSState,
   fieldId: string
@@ -74,14 +151,86 @@ export function removeDynamicField(
   };
 }
 
+export function archiveDynamicField(
+  state: SchoolECSState,
+  fieldId: string
+): SchoolECSState {
+  return {
+    ...state,
+    dynamicFields: state.dynamicFields.map((f) =>
+      f.id === fieldId ? { ...f, archived: true } : f
+    ),
+  };
+}
+
+export function restoreDynamicField(
+  state: SchoolECSState,
+  fieldId: string
+): SchoolECSState {
+  return {
+    ...state,
+    dynamicFields: state.dynamicFields.map((f) =>
+      f.id === fieldId ? { ...f, archived: false } : f
+    ),
+  };
+}
+
+export function updateLearnerProfile(
+  state: SchoolECSState,
+  learnerId: string,
+  updates: {
+    name?: string;
+    enrollmentStatus?: 'Active' | 'Probation' | 'Alumni';
+    parentName?: string;
+    guardianPhone?: string;
+    internalHealthNote?: string;
+    customFields?: Record<string, string | number | boolean>;
+  }
+): { state: SchoolECSState; error?: string } {
+  const existing = state.learners.find((l) => l.id === learnerId);
+  if (!existing) {
+    return { state, error: 'Learner not found.' };
+  }
+  const nextName = (updates.name ?? existing.name).trim();
+  if (!nextName) {
+    return { state, error: 'Learner name is required.' };
+  }
+  const learnerFields = getFieldsForEntity(state, 'learner', 'admin');
+  const nextCustom = {
+    ...existing.customFields,
+    ...(updates.customFields ?? {}),
+  };
+  const err = validateCustomFields(learnerFields, nextCustom, 'admin');
+  if (err) {
+    return { state, error: err };
+  }
+  return {
+    state: {
+      ...state,
+      learners: state.learners.map((l) =>
+        l.id === learnerId
+          ? {
+              ...l,
+              ...updates,
+              name: nextName,
+              customFields: nextCustom,
+            }
+          : l
+      ),
+    },
+  };
+}
+
 export function getFieldsForEntity(
   state: SchoolECSState,
   entityType: DynamicFieldDefinition['targetEntityType'],
-  role: Role
+  role: Role,
+  includeArchived = false
 ): DynamicFieldDefinition[] {
   return state.dynamicFields.filter(
     (f) =>
       f.targetEntityType === entityType &&
+      (includeArchived || !f.archived) &&
       (role === 'admin' || f.visibleTo.includes(role))
   );
 }
@@ -211,6 +360,63 @@ export function createDiaryEntry(
       diaryEntries: [entry, ...state.diaryEntries],
     },
     entry,
+  };
+}
+
+export function broadcastClassroomDiary(
+  state: SchoolECSState,
+  input: {
+    classroomId: string;
+    teacherId: string;
+    date: string;
+    homeworkSummary: string;
+    teacherNote: string;
+    customFields: Record<string, string | number | boolean>;
+    actorRole: Role;
+  }
+): { state: SchoolECSState; entries: DiaryEntryEntity[]; error?: string } {
+  const classroomLearners = state.learners.filter(
+    (l) => l.classroomId === input.classroomId
+  );
+  if (classroomLearners.length === 0) {
+    return {
+      state,
+      entries: [],
+      error: 'No learners enrolled in the selected classroom.',
+    };
+  }
+  if (!input.homeworkSummary.trim()) {
+    return { state, entries: [], error: 'Homework summary is required.' };
+  }
+  const defs = getFieldsForEntity(state, 'diary_entry', input.actorRole);
+  const validationError = validateCustomFields(
+    defs,
+    input.customFields,
+    input.actorRole
+  );
+  if (validationError) {
+    return { state, entries: [], error: validationError };
+  }
+
+  const stamp = Date.now();
+  const entries: DiaryEntryEntity[] = classroomLearners.map((learner, idx) => ({
+    id: `dia_${stamp}_${idx}_${Math.random().toString(36).slice(2, 5)}`,
+    learnerId: learner.id,
+    classroomId: learner.classroomId,
+    teacherId: input.teacherId,
+    date: input.date,
+    homeworkSummary: input.homeworkSummary.trim(),
+    teacherNote: input.teacherNote.trim(),
+    parentAcknowledged: false,
+    customFields: { ...input.customFields },
+  }));
+
+  return {
+    state: {
+      ...state,
+      diaryEntries: [...entries, ...state.diaryEntries],
+    },
+    entries,
   };
 }
 
@@ -409,6 +615,222 @@ export function upsertAttendanceRecord(
       attendanceRecords: [record, ...state.attendanceRecords],
     },
     record,
+  };
+}
+
+export function markClassroomAllPresent(
+  state: SchoolECSState,
+  input: {
+    classroomId: string;
+    teacherId: string;
+    date: string;
+  }
+): { state: SchoolECSState; count: number; error?: string } {
+  const learners = state.learners.filter(
+    (l) => l.classroomId === input.classroomId
+  );
+  if (learners.length === 0) {
+    return {
+      state,
+      count: 0,
+      error: 'No learners enrolled in the selected classroom.',
+    };
+  }
+  let nextState = state;
+  for (const learner of learners) {
+    const existing = nextState.attendanceRecords.find(
+      (r) => r.learnerId === learner.id && r.date === input.date
+    );
+    const res = upsertAttendanceRecord(nextState, {
+      learnerId: learner.id,
+      teacherId: input.teacherId,
+      date: input.date,
+      status: 'present',
+      remark: existing?.remark || 'Batch roll call: Present.',
+      customFields: existing?.customFields ?? { uniform_compliant: true },
+    });
+    if (!res.error) {
+      nextState = res.state;
+    }
+  }
+  return { state: nextState, count: learners.length };
+}
+
+export function detectTimetableConflict(
+  slots: TimetableSlotEntity[],
+  candidate: {
+    classroomId: string;
+    teacherId: string;
+    day: Weekday;
+    period: number;
+    room: string;
+  },
+  ignoreSlotId?: string
+): string | null {
+  const normalizedRoom = candidate.room.trim().toLowerCase();
+  for (const slot of slots) {
+    if (ignoreSlotId && slot.id === ignoreSlotId) continue;
+    if (slot.day !== candidate.day || slot.period !== candidate.period) {
+      continue;
+    }
+    if (slot.classroomId === candidate.classroomId) {
+      return `Classroom already has a scheduled period on ${candidate.day} P${candidate.period}.`;
+    }
+    if (slot.teacherId === candidate.teacherId) {
+      return `Teacher is already double-booked on ${candidate.day} P${candidate.period}.`;
+    }
+    if (
+      normalizedRoom &&
+      slot.room.trim().toLowerCase() === normalizedRoom
+    ) {
+      return `Room "${candidate.room.trim()}" is already booked on ${candidate.day} P${candidate.period}.`;
+    }
+  }
+  return null;
+}
+
+export function upsertTimetableSlot(
+  state: SchoolECSState,
+  input: {
+    id?: string;
+    classroomId: string;
+    subjectId: string;
+    teacherId: string;
+    day: Weekday;
+    period: number;
+    timeRange: string;
+    room: string;
+  }
+): { state: SchoolECSState; slot?: TimetableSlotEntity; error?: string } {
+  if (!input.classroomId || !input.subjectId || !input.teacherId) {
+    return { state, error: 'Classroom, subject, and teacher are required.' };
+  }
+  const cleanRoom = input.room.trim();
+  const cleanTime = input.timeRange.trim();
+  if (!cleanRoom || !cleanTime) {
+    return { state, error: 'Time range and room code are required.' };
+  }
+  const period = Math.max(1, Math.min(12, Math.round(Number(input.period) || 1)));
+  const conflict = detectTimetableConflict(
+    state.timetableSlots,
+    {
+      classroomId: input.classroomId,
+      teacherId: input.teacherId,
+      day: input.day,
+      period,
+      room: cleanRoom,
+    },
+    input.id
+  );
+  if (conflict) {
+    return { state, error: conflict };
+  }
+
+  const slot: TimetableSlotEntity = {
+    id:
+      input.id ??
+      `tt_${input.day.toLowerCase()}_${period}_${Date.now().toString(36)}`,
+    classroomId: input.classroomId,
+    subjectId: input.subjectId,
+    teacherId: input.teacherId,
+    day: input.day,
+    period,
+    timeRange: cleanTime,
+    room: cleanRoom,
+  };
+
+  const exists = Boolean(
+    input.id && state.timetableSlots.some((s) => s.id === input.id)
+  );
+  return {
+    state: {
+      ...state,
+      timetableSlots: exists
+        ? state.timetableSlots.map((s) => (s.id === slot.id ? slot : s))
+        : [...state.timetableSlots, slot],
+    },
+    slot,
+  };
+}
+
+export function invitePortalUserAccount(
+  state: SchoolECSState,
+  input: {
+    email: string;
+    displayName: string;
+    role: Role;
+    teacherId?: string;
+    linkedLearnerIds: string[];
+  }
+): { state: SchoolECSState; user?: PortalUserAccount; error?: string } {
+  const email = input.email.trim().toLowerCase();
+  const displayName = input.displayName.trim();
+  if (!email || !email.includes('@')) {
+    return { state, error: 'Valid user email is required.' };
+  }
+  if (!displayName) {
+    return { state, error: 'Display name is required.' };
+  }
+  if (state.users.some((u) => u.email.toLowerCase() === email)) {
+    return { state, error: `A user account with ${email} already exists.` };
+  }
+  const user: PortalUserAccount = {
+    id: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    email,
+    displayName,
+    role: input.role,
+    teacherId: input.role === 'parent' ? undefined : input.teacherId || undefined,
+    linkedLearnerIds: Array.from(new Set(input.linkedLearnerIds)),
+  };
+  return {
+    state: {
+      ...state,
+      users: [...state.users, user],
+    },
+    user,
+  };
+}
+
+export function updatePortalUserAccount(
+  state: SchoolECSState,
+  userId: string,
+  updates: Partial<
+    Pick<
+      PortalUserAccount,
+      'displayName' | 'role' | 'teacherId' | 'linkedLearnerIds'
+    >
+  >
+): { state: SchoolECSState; user?: PortalUserAccount; error?: string } {
+  const existing = state.users.find((u) => u.id === userId);
+  if (!existing) {
+    return { state, error: 'User account not found.' };
+  }
+  const nextRole = updates.role ?? existing.role;
+  const nextName = (updates.displayName ?? existing.displayName).trim();
+  if (!nextName) {
+    return { state, error: 'Display name is required.' };
+  }
+  const updated: PortalUserAccount = {
+    ...existing,
+    ...updates,
+    displayName: nextName,
+    role: nextRole,
+    teacherId:
+      nextRole === 'parent'
+        ? undefined
+        : updates.teacherId !== undefined
+          ? updates.teacherId || undefined
+          : existing.teacherId,
+    linkedLearnerIds: Array.from(
+      new Set(updates.linkedLearnerIds ?? existing.linkedLearnerIds)
+    ),
+  };
+  return {
+    state: {
+      ...state,
+      users: state.users.map((u) => (u.id === userId ? updated : u)),
+    },
+    user: updated,
   };
 }
 
@@ -722,4 +1144,162 @@ export function buildLearnerLongitudinalReport(
     timeline,
   };
 }
+
+export function computeSubjectMasteryProgression(
+  state: SchoolECSState,
+  learnerId: string,
+  fromDate?: string,
+  toDate?: string
+): SubjectMasterySeries[] {
+  const filtered = state.assessments
+    .filter((a) => {
+      if (a.learnerId !== learnerId) return false;
+      if (fromDate && a.date < fromDate) return false;
+      if (toDate && a.date > toDate) return false;
+      return true;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const bySubject = new Map<string, SubjectMasteryPoint[]>();
+  for (const entry of filtered) {
+    const sub = state.substrands.find((s) => s.id === entry.substrandId);
+    const pt: SubjectMasteryPoint = {
+      date: entry.date,
+      scorePercent: entry.scorePercent,
+      mastery: entry.mastery,
+      substrandTitle: sub ? `${sub.code}: ${sub.title}` : entry.substrandId,
+    };
+    const arr = bySubject.get(entry.subjectId) ?? [];
+    arr.push(pt);
+    bySubject.set(entry.subjectId, arr);
+  }
+
+  const series: SubjectMasterySeries[] = [];
+  for (const subject of state.subjects) {
+    const points = bySubject.get(subject.id);
+    if (!points || points.length === 0) continue;
+    const latestScore = points[points.length - 1].scorePercent;
+    const deltaFromFirst = latestScore - points[0].scorePercent;
+    series.push({
+      subject,
+      points,
+      latestScore,
+      deltaFromFirst,
+    });
+  }
+  return series;
+}
+
+export function escapeHtml(raw: string): string {
+  return raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function buildLearnerPrintableReportHtml(
+  state: SchoolECSState,
+  learnerId: string,
+  role: Role,
+  timeframe: LearnerTimeframe,
+  referenceToday = '2026-11-25'
+): string | null {
+  const report = buildLearnerLongitudinalReport(
+    state,
+    learnerId,
+    role,
+    timeframe,
+    referenceToday
+  );
+  if (!report) return null;
+
+  const { learner, bounds } = report;
+  const classroom = state.classrooms.find((c) => c.id === learner.classroomId);
+  const progression = computeSubjectMasteryProgression(
+    state,
+    learnerId,
+    bounds.from,
+    bounds.to
+  );
+
+  const subjectRows = progression
+    .map((s) => {
+      const deltaSign = s.deltaFromFirst >= 0 ? '+' : '';
+      return `<tr>
+        <td>${escapeHtml(s.subject.name)}</td>
+        <td>${s.points.length}</td>
+        <td>${s.latestScore}%</td>
+        <td>${deltaSign}${s.deltaFromFirst}%</td>
+      </tr>`;
+    })
+    .join('');
+
+  const assessmentRows = report.assessments
+    .map((a) => {
+      const subj = state.subjects.find((s) => s.id === a.subjectId);
+      const sub = state.substrands.find((s) => s.id === a.substrandId);
+      return `<tr>
+        <td>${escapeHtml(a.date)}</td>
+        <td>${escapeHtml(subj?.name ?? a.subjectId)}</td>
+        <td>${escapeHtml(sub ? `${sub.code}: ${sub.title}` : a.substrandId)}</td>
+        <td>${escapeHtml(a.mastery)} (${a.scorePercent}%)</td>
+        <td>${escapeHtml(a.performanceComment)}</td>
+      </tr>`;
+    })
+    .join('');
+
+  const diaryRows = report.diary
+    .map(
+      (d) => `<tr>
+        <td>${escapeHtml(d.date)}</td>
+        <td>${escapeHtml(d.homeworkSummary)}</td>
+        <td>${escapeHtml(d.teacherNote || '—')}</td>
+        <td>${d.parentAcknowledged ? 'Signed' : 'Pending'}</td>
+      </tr>`
+    )
+    .join('');
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Learner Report — ${escapeHtml(learner.name)}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 32px; line-height: 1.5; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    h2 { margin: 24px 0 8px; font-size: 15px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+    .meta { color: #475569; font-size: 13px; margin-bottom: 16px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+    .kpi { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; }
+    .kpi-label { font-size: 11px; color: #64748b; }
+    .kpi-value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+    th, td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; font-weight: 600; }
+    @media print { body { margin: 16px; } }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(learner.name)} — Longitudinal Learner Report</h1>
+  <div class="meta">
+    Admission: ${escapeHtml(learner.admissionNo)} · Classroom: ${escapeHtml(classroom?.name ?? learner.classroomId)} · Window: ${escapeHtml(bounds.from)} to ${escapeHtml(bounds.to)} · Portal View: ${escapeHtml(role.toUpperCase())}
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">Registered</div><div class="kpi-value">${escapeHtml(learner.registeredAt)}</div></div>
+    <div class="kpi"><div class="kpi-label">Average Assessment</div><div class="kpi-value">${report.averageScore !== null ? `${report.averageScore}%` : '—'}</div></div>
+    <div class="kpi"><div class="kpi-label">Attendance Rate</div><div class="kpi-value">${report.attendanceRate !== null ? `${report.attendanceRate}%` : '—'}</div></div>
+    <div class="kpi"><div class="kpi-label">Diary Awards</div><div class="kpi-value">${report.awardsCount} / ${report.diary.length}</div></div>
+  </div>
+  <h2>Subject Mastery Progression</h2>
+  <table><thead><tr><th>Subject</th><th>Assessments</th><th>Latest Score</th><th>Progression</th></tr></thead><tbody>${subjectRows || '<tr><td colspan="4">No subject assessments in range.</td></tr>'}</tbody></table>
+  <h2>Assessment Book</h2>
+  <table><thead><tr><th>Date</th><th>Subject</th><th>Substrand</th><th>Mastery</th><th>Comment</th></tr></thead><tbody>${assessmentRows || '<tr><td colspan="5">No assessments in range.</td></tr>'}</tbody></table>
+  <h2>School Diary</h2>
+  <table><thead><tr><th>Date</th><th>Homework</th><th>Teacher Note</th><th>Parent Sign-off</th></tr></thead><tbody>${diaryRows || '<tr><td colspan="4">No diary entries in range.</td></tr>'}</tbody></table>
+</body>
+</html>`;
+}
+
 

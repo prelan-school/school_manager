@@ -23,17 +23,18 @@ class LessonPlansPage extends ConsumerWidget {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           title: const Text('Schedule Lesson Plan'),
-          content: SizedBox(
-            width: 480,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
                     value: substrandId,
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Linked Substrand', border: OutlineInputBorder(), isDense: true),
                     items: state.substrands
-                        .map((s) => DropdownMenuItem(value: s.id, child: Text('${s.code} — ${s.title}')))
+                        .map((s) => DropdownMenuItem(value: s.id, child: Text('${s.code} — ${s.title}', overflow: TextOverflow.ellipsis)))
                         .toList(),
                     onChanged: (v) {
                       if (v != null) setState(() => substrandId = v);
@@ -42,9 +43,10 @@ class LessonPlansPage extends ConsumerWidget {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: classroomId,
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Classroom', border: OutlineInputBorder(), isDense: true),
                     items: state.classrooms
-                        .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
+                        .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))
                         .toList(),
                     onChanged: (v) {
                       if (v != null) setState(() => classroomId = v);
@@ -53,9 +55,10 @@ class LessonPlansPage extends ConsumerWidget {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: slotId,
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Timetable Slot', border: OutlineInputBorder(), isDense: true),
                     items: state.timetableSlots
-                        .map((sl) => DropdownMenuItem(value: sl.id, child: Text('${sl.day} P${sl.period} (${sl.room})')))
+                        .map((sl) => DropdownMenuItem(value: sl.id, child: Text('${sl.day} P${sl.period} (${sl.room})', overflow: TextOverflow.ellipsis)))
                         .toList(),
                     onChanged: (v) {
                       if (v != null) setState(() => slotId = v);
@@ -70,11 +73,13 @@ class LessonPlansPage extends ConsumerWidget {
                   Row(
                     children: [
                       Expanded(
+                        flex: 2,
                         child: DropdownButtonFormField<LessonStatus>(
                           value: status,
+                          isExpanded: true,
                           decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder(), isDense: true),
                           items: LessonStatus.values
-                              .map((st) => DropdownMenuItem(value: st, child: Text(st.label)))
+                              .map((st) => DropdownMenuItem(value: st, child: Text(st.label, overflow: TextOverflow.ellipsis)))
                               .toList(),
                           onChanged: (v) {
                             if (v != null) setState(() => status = v);
@@ -82,8 +87,8 @@ class LessonPlansPage extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      SizedBox(
-                        width: 120,
+                      Expanded(
+                        flex: 1,
                         child: TextField(
                           controller: deliveredCtrl,
                           keyboardType: TextInputType.number,
@@ -186,7 +191,7 @@ class LessonPlansPage extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Column(
@@ -200,9 +205,13 @@ class LessonPlansPage extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    Text(
-                      '${lp.status.label} (${lp.lessonsDelivered}/${sub?.targetLessons ?? 1})',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      flex: 0,
+                      child: Text(
+                        '${lp.status.label} (${lp.lessonsDelivered}/${sub?.targetLessons ?? 1})',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ],
                 ),
@@ -212,32 +221,42 @@ class LessonPlansPage extends ConsumerWidget {
                 ],
                 const Divider(height: 20),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Teacher: ${teacher?.name ?? ''}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                    if (canEdit)
-                      Wrap(
-                        spacing: 6,
-                        children: LessonStatus.values.map((nextStatus) {
-                          final active = lp.status == nextStatus;
-                          return ChoiceChip(
-                            label: Text(nextStatus.label, style: const TextStyle(fontSize: 11)),
-                            selected: active,
-                            onSelected: (_) {
-                              final count = nextStatus == LessonStatus.taught
-                                  ? (lp.lessonsDelivered < 2 ? 2 : lp.lessonsDelivered)
-                                  : nextStatus == LessonStatus.inProgress
-                                      ? (lp.lessonsDelivered < 1 ? 1 : lp.lessonsDelivered)
-                                      : 0;
-                              ref.read(schoolEcsProvider.notifier).updateLessonPlanStatus(
-                                    lp.id,
-                                    nextStatus,
-                                    count,
-                                  );
-                            },
-                          );
-                        }).toList(),
+                    Expanded(
+                      child: Text(
+                        'Teacher: ${teacher?.name ?? ''}',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
+                    ),
+                    if (canEdit) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          alignment: WrapAlignment.end,
+                          children: LessonStatus.values.map((nextStatus) {
+                            final active = lp.status == nextStatus;
+                            return ChoiceChip(
+                              label: Text(nextStatus.label, style: const TextStyle(fontSize: 11)),
+                              selected: active,
+                              onSelected: (_) {
+                                final count = nextStatus == LessonStatus.taught
+                                    ? (lp.lessonsDelivered < 2 ? 2 : lp.lessonsDelivered)
+                                    : nextStatus == LessonStatus.inProgress
+                                        ? (lp.lessonsDelivered < 1 ? 1 : lp.lessonsDelivered)
+                                        : 0;
+                                ref.read(schoolEcsProvider.notifier).updateLessonPlanStatus(
+                                      lp.id,
+                                      nextStatus,
+                                      count,
+                                    );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],

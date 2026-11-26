@@ -17,7 +17,8 @@ class DynamicFieldInputs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleFields = fields.where((f) => f.isVisibleTo(role)).toList();
+    final visibleFields =
+        fields.where((f) => !f.archived && f.isVisibleTo(role)).toList();
     if (visibleFields.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -61,13 +62,19 @@ class DynamicFieldInputs extends StatelessWidget {
                   ),
                 DynamicFieldType.select => DropdownButtonFormField<String>(
                     value: field.options.contains(current) ? current as String : null,
+                    isExpanded: true,
                     decoration: InputDecoration(
                       labelText: '${field.label}${field.required ? ' *' : ''}',
                       border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                     items: field.options
-                        .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                        .map(
+                          (o) => DropdownMenuItem(
+                            value: o,
+                            child: Text(o, overflow: TextOverflow.ellipsis),
+                          ),
+                        )
                         .toList(),
                     onChanged: editable ? (v) => onChanged(field.key, v ?? '') : null,
                   ),

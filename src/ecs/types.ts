@@ -21,7 +21,14 @@ export interface DynamicFieldDefinition {
   label: string;
   targetEntityType: Extract<
     EntityType,
-    'diary_entry' | 'assessment_entry' | 'lesson_plan' | 'attendance_record' | 'scheme_substrand'
+    | 'learner'
+    | 'diary_entry'
+    | 'scheme_strand'
+    | 'scheme_substrand'
+    | 'assessment_entry'
+    | 'lesson_plan'
+    | 'timetable_slot'
+    | 'attendance_record'
   >;
   fieldType: DynamicFieldType;
   options?: string[];
@@ -29,6 +36,16 @@ export interface DynamicFieldDefinition {
   visibleTo: Role[];
   editableBy: Role[];
   description: string;
+  archived?: boolean;
+}
+
+export interface PortalUserAccount {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  teacherId?: string;
+  linkedLearnerIds: string[];
 }
 
 export interface ClassroomEntity {
@@ -196,6 +213,7 @@ export interface AttendanceRecordEntity {
 }
 
 export interface SchoolECSState {
+  users: PortalUserAccount[];
   dynamicFields: DynamicFieldDefinition[];
   pageWidgets: PageWidgetDefinition[];
   classrooms: ClassroomEntity[];
@@ -209,6 +227,20 @@ export interface SchoolECSState {
   lessonPlans: LessonPlanEntity[];
   timetableSlots: TimetableSlotEntity[];
   attendanceRecords: AttendanceRecordEntity[];
+}
+
+export interface SubjectMasteryPoint {
+  date: string;
+  scorePercent: number;
+  mastery: MasteryLevel;
+  substrandTitle: string;
+}
+
+export interface SubjectMasterySeries {
+  subject: SubjectEntity;
+  points: SubjectMasteryPoint[];
+  latestScore: number;
+  deltaFromFirst: number;
 }
 
 export interface SubstrandCoverageReport {

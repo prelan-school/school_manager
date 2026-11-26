@@ -1,6 +1,39 @@
 import type { SchoolECSState } from './types';
 
 export const INITIAL_ECS_STATE: SchoolECSState = {
+  users: [
+    {
+      id: 'usr_admin',
+      email: 'prelanadm@gmail.com',
+      displayName: 'Default Admin',
+      role: 'admin',
+      teacherId: 'tch_amara',
+      linkedLearnerIds: ['lrn_zuri'],
+    },
+    {
+      id: 'usr_amara',
+      email: 'amara.okafor@scholaecs.edu',
+      displayName: 'Amara Okafor',
+      role: 'teacher',
+      teacherId: 'tch_amara',
+      linkedLearnerIds: [],
+    },
+    {
+      id: 'usr_david',
+      email: 'david.kamau@scholaecs.edu',
+      displayName: 'David Kamau',
+      role: 'teacher',
+      teacherId: 'tch_david',
+      linkedLearnerIds: [],
+    },
+    {
+      id: 'usr_grace',
+      email: 'grace.mwangi@family.org',
+      displayName: 'Grace Mwangi',
+      role: 'parent',
+      linkedLearnerIds: ['lrn_zuri', 'lrn_liam'],
+    },
+  ],
   dynamicFields: [
     {
       id: 'df_diary_awards',

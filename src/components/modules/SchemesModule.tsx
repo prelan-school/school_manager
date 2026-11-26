@@ -1,11 +1,13 @@
 import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import {
+  getFieldsForEntity,
   registerSchemeStrand,
   registerSchemeSubstrand,
 } from '../../ecs/engine';
 import type { Role, SchoolECSState } from '../../ecs/types';
 import { AppDialog } from '../AppDialog';
+import { DynamicFieldInputs } from '../DynamicFieldsRenderer';
 
 interface SchemesModuleProps {
   state: SchoolECSState;
@@ -38,9 +40,13 @@ export function SchemesModule({
   const [subTitle, setSubTitle] = useState('');
   const [subOutcome, setSubOutcome] = useState('');
   const [targetLessons, setTargetLessons] = useState(4);
+  const [subCustomFields, setSubCustomFields] = useState<
+    Record<string, string | number | boolean>
+  >({});
   const [subError, setSubError] = useState<string | null>(null);
 
   const canEdit = role === 'admin' || role === 'teacher';
+  const substrandFields = getFieldsForEntity(state, 'scheme_substrand', role);
 
   const handleCreateStrand = (e: FormEvent) => {
     e.preventDefault();
@@ -73,6 +79,7 @@ export function SchemesModule({
       title: subTitle,
       learningOutcome: subOutcome,
       targetLessons,
+      customFields: subCustomFields,
     });
     if (res.error) {
       setSubError(res.error);
@@ -83,6 +90,7 @@ export function SchemesModule({
     setSubTitle('');
     setSubOutcome('');
     setTargetLessons(4);
+    setSubCustomFields({});
     onStateChange(res.state);
     setShowSubstrandDialog(false);
   };
@@ -327,6 +335,15 @@ export function SchemesModule({
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
             />
           </div>
+
+          <DynamicFieldInputs
+            fields={substrandFields}
+            values={subCustomFields}
+            role={role}
+            onChange={(key, value) =>
+              setSubCustomFields((prev) => ({ ...prev, [key]: value }))
+            }
+          />
 
           {subError && (
             <p className="text-xs font-medium text-red-600">{subError}</p>

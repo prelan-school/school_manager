@@ -34,7 +34,14 @@ function loadSavedState(): SchoolECSState {
       Array.isArray(parsed.dynamicFields) &&
       Array.isArray(parsed.diaryEntries)
     ) {
-      return parsed as SchoolECSState;
+      return {
+        ...INITIAL_ECS_STATE,
+        ...parsed,
+        users:
+          Array.isArray(parsed.users) && parsed.users.length > 0
+            ? parsed.users
+            : INITIAL_ECS_STATE.users,
+      } as SchoolECSState;
     }
   } catch {
     // Ignore corrupted cache and fall back to deterministic initial data
@@ -62,6 +69,9 @@ export default function App() {
   const [activeTeacherId, setActiveTeacherId] = useState<string>(
     INITIAL_ECS_STATE.teachers[0].id
   );
+  const [activeParentUserId, setActiveParentUserId] = useState<string>(
+    INITIAL_ECS_STATE.users.find((u) => u.role === 'parent')?.id ?? 'usr_grace'
+  );
   const [activeLearnerId, setActiveLearnerId] = useState<string>(
     INITIAL_ECS_STATE.learners[0].id
   );
@@ -86,8 +96,28 @@ export default function App() {
 
   const handleRoleChange = (nextRole: Role) => {
     setRole(nextRole);
-    if (nextRole === 'parent' && selectedLearnerId) {
-      setSelectedLearnerId(activeLearnerId);
+    if (nextRole === 'parent') {
+      const guardian = ecsState.users.find((u) => u.id === activeParentUserId);
+      const allowedChildIds = guardian?.linkedLearnerIds ?? [];
+      const resolvedChildId = allowedChildIds.includes(activeLearnerId)
+        ? activeLearnerId
+        : (allowedChildIds[0] ?? activeLearnerId);
+      setActiveLearnerId(resolvedChildId);
+      if (selectedLearnerId) {
+        setSelectedLearnerId(resolvedChildId);
+      }
+    }
+  };
+
+  const handleParentUserChange = (nextParentUserId: string) => {
+    setActiveParentUserId(nextParentUserId);
+    const guardian = ecsState.users.find((u) => u.id === nextParentUserId);
+    const firstChild = guardian?.linkedLearnerIds[0];
+    if (firstChild) {
+      setActiveLearnerId(firstChild);
+      if (role === 'parent' && selectedLearnerId) {
+        setSelectedLearnerId(firstChild);
+      }
     }
   };
 
@@ -141,11 +171,13 @@ export default function App() {
           role={role}
           activeModule={activeModule}
           activeTeacherId={activeTeacherId}
+          activeParentUserId={activeParentUserId}
           activeLearnerId={activeLearnerId}
           selectedLearnerId={selectedLearnerId}
           onRoleChange={handleRoleChange}
           onModuleChange={setActiveModule}
           onTeacherChange={setActiveTeacherId}
+          onParentUserChange={handleParentUserChange}
           onLearnerChange={handleLearnerScopeChange}
           onOpenLearnerPage={(lid) => setSelectedLearnerId(lid)}
           onCloseLearnerPage={() => setSelectedLearnerId(null)}

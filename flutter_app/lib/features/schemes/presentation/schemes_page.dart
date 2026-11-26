@@ -20,41 +20,47 @@ class SchemesPage extends ConsumerWidget {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           title: const Text('Register Curriculum Strand'),
-          content: SizedBox(
-            width: 440,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: subjectId,
-                  decoration: const InputDecoration(labelText: 'Subject', border: OutlineInputBorder(), isDense: true),
-                  items: state.subjects.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => subjectId = v);
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: codeCtrl,
-                  decoration: const InputDecoration(labelText: 'Strand Code *', border: OutlineInputBorder(), isDense: true),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(labelText: 'Strand Title *', border: OutlineInputBorder(), isDense: true),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: term,
-                  decoration: const InputDecoration(labelText: 'Term', border: OutlineInputBorder(), isDense: true),
-                  items: const ['Term 1', 'Term 2', 'Term 3']
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => term = v);
-                  },
-                ),
-              ],
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: subjectId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Subject', border: OutlineInputBorder(), isDense: true),
+                    items: state.subjects
+                        .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => subjectId = v);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: codeCtrl,
+                    decoration: const InputDecoration(labelText: 'Strand Code *', border: OutlineInputBorder(), isDense: true),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: const InputDecoration(labelText: 'Strand Title *', border: OutlineInputBorder(), isDense: true),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: term,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Term', border: OutlineInputBorder(), isDense: true),
+                    items: const ['Term 1', 'Term 2', 'Term 3']
+                        .map((t) => DropdownMenuItem(value: t, child: Text(t, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => term = v);
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -95,43 +101,51 @@ class SchemesPage extends ConsumerWidget {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           title: const Text('Add Substrand Under Strand'),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: strandId,
-                  decoration: const InputDecoration(labelText: 'Parent Strand', border: OutlineInputBorder(), isDense: true),
-                  items: state.strands
-                      .map((st) => DropdownMenuItem(value: st.id, child: Text('${st.code} — ${st.title}')))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => strandId = v);
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: codeCtrl,
-                  decoration: const InputDecoration(labelText: 'Substrand Code *', border: OutlineInputBorder(), isDense: true),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(labelText: 'Substrand Title *', border: OutlineInputBorder(), isDense: true),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: outcomeCtrl,
-                  decoration: const InputDecoration(labelText: 'Learning Outcome', border: OutlineInputBorder(), isDense: true),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: lessonsCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Target Lessons', border: OutlineInputBorder(), isDense: true),
-                ),
-              ],
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: strandId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Parent Strand', border: OutlineInputBorder(), isDense: true),
+                    items: state.strands
+                        .map(
+                          (st) => DropdownMenuItem(
+                            value: st.id,
+                            child: Text('${st.code} — ${st.title}', overflow: TextOverflow.ellipsis),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => strandId = v);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: codeCtrl,
+                    decoration: const InputDecoration(labelText: 'Substrand Code *', border: OutlineInputBorder(), isDense: true),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: const InputDecoration(labelText: 'Substrand Title *', border: OutlineInputBorder(), isDense: true),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: outcomeCtrl,
+                    decoration: const InputDecoration(labelText: 'Learning Outcome', border: OutlineInputBorder(), isDense: true),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: lessonsCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Target Lessons', border: OutlineInputBorder(), isDense: true),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -222,20 +236,27 @@ class SchemesPage extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${subj?.name ?? ''} · ${strand.term}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                        Text('${strand.code}: ${strand.title}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                    if (canEdit)
-                      TextButton(
-                        onPressed: () => _showSubstrandDialog(context, ref, strand.id),
-                        child: const Text('+ Add Substrand'),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${subj?.name ?? ''} · ${strand.term}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                          Text('${strand.code}: ${strand.title}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                        ],
                       ),
+                    ),
+                    if (canEdit) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        flex: 0,
+                        child: TextButton(
+                          onPressed: () => _showSubstrandDialog(context, ref, strand.id),
+                          child: const Text('+ Add Substrand'),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const Divider(height: 20),
@@ -245,6 +266,7 @@ class SchemesPage extends ConsumerWidget {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Column(
@@ -255,9 +277,14 @@ class SchemesPage extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        Text(
-                          '${sub.targetLessons} lessons · $planCount plans · $assessCount assessments',
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          flex: 0,
+                          child: Text(
+                            '${sub.targetLessons} lessons · $planCount plans · $assessCount assessments',
+                            textAlign: TextAlign.end,
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                          ),
                         ),
                       ],
                     ),

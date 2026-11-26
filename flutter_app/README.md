@@ -23,7 +23,11 @@ A loosely coupled Entity-Component-System (ECS) school platform with **Admin**, 
    ```
    Replace `lib/core/firebase/firebase_options_placeholder.dart` usage in `lib/main.dart` with your generated `firebase_options.dart` (`DefaultFirebaseOptions.currentPlatform`).
 2. Copy PWA icons into `web/icons/` (`Icon-192.png`, `Icon-512.png`, `Icon-maskable-512.png`).
-3. Build the release Web bundle and deploy to Firebase Hosting + Firestore:
+3. **Default Admin Account (`role: "admin"`)**:
+   - The default admin email is preconfigured as `prelanadm@gmail.com` (overridable via `--dart-define=DEFAULT_ADMIN_EMAIL=you@school.edu`, and synced in `firestore.rules`).
+   - Sign in with **Google** as `prelanadm@gmail.com` (or register via **Email/Password** and click the verification email link) to automatically create `/users/{uid}` with `role: "admin"`.
+   - From **Schema Studio -> Portal Users & Role Assignment**, the Admin can promote other accounts to `teacher` or `admin`.
+4. Build the release Web bundle and deploy to Firebase Hosting + Firestore:
    ```bash
    flutter pub get
    flutter build web --release

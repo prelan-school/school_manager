@@ -27,14 +27,34 @@ class AdminCoveragePage extends ConsumerWidget {
           style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _StatCard(label: 'Overall Coverage', value: '$avgCoverage%')),
-            const SizedBox(width: 12),
-            Expanded(child: _StatCard(label: 'Lesson Plans Taught', value: '$taughtCount / ${ecs.lessonPlans.length}')),
-            const SizedBox(width: 12),
-            Expanded(child: _StatCard(label: 'Substrands', value: '${substrandReports.length}')),
-          ],
+        LayoutBuilder(
+          builder: (ctx, constraints) {
+            if (constraints.maxWidth >= 520) {
+              return Row(
+                children: [
+                  Expanded(child: _StatCard(label: 'Overall Coverage', value: '$avgCoverage%')),
+                  const SizedBox(width: 12),
+                  Expanded(child: _StatCard(label: 'Lesson Plans Taught', value: '$taughtCount / ${ecs.lessonPlans.length}')),
+                  const SizedBox(width: 12),
+                  Expanded(child: _StatCard(label: 'Substrands', value: '${substrandReports.length}')),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _StatCard(label: 'Overall Coverage', value: '$avgCoverage%'),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: _StatCard(label: 'Lesson Plans Taught', value: '$taughtCount / ${ecs.lessonPlans.length}')),
+                    const SizedBox(width: 10),
+                    Expanded(child: _StatCard(label: 'Substrands', value: '${substrandReports.length}')),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 16),
         Container(
@@ -53,12 +73,18 @@ class AdminCoveragePage extends ConsumerWidget {
                 (t) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(t.teacher.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      Text(
-                        'Taught: ${t.taughtPlans}/${t.totalPlans} · Lessons: ${t.totalLessonsDelivered} · Assessments: ${t.assessmentsLogged}',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                      Expanded(
+                        child: Text(t.teacher.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          'Taught: ${t.taughtPlans}/${t.totalPlans} · Lessons: ${t.totalLessonsDelivered} · Assessments: ${t.assessmentsLogged}',
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                        ),
                       ),
                     ],
                   ),
@@ -87,10 +113,23 @@ class AdminCoveragePage extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${r.substrand.code}: ${r.substrand.title}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          Text('${r.coveragePercent}% (${r.deliveredLessons}/${r.targetLessons})', style: const TextStyle(fontSize: 12)),
+                          Expanded(
+                            child: Text(
+                              '${r.substrand.code}: ${r.substrand.title}',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            flex: 0,
+                            child: Text(
+                              '${r.coveragePercent}% (${r.deliveredLessons}/${r.targetLessons})',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 6),

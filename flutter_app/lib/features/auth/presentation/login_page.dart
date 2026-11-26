@@ -21,6 +21,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _isRegister = false;
   bool _loading = false;
   String? _error;
+  String? _info;
 
   @override
   void dispose() {
@@ -33,26 +34,37 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Future<void> _submitEmail() async {
     final firebaseReady = ref.read(firebaseReadyProvider);
     if (!firebaseReady) {
-      setState(() => _error = 'Configure Firebase via flutterfire configure to use live Auth, or choose a Demo Portal below.');
+      setState(
+        () => _error =
+            'Configure Firebase via flutterfire configure to use live Auth, or choose a Demo Portal below.',
+      );
       return;
     }
     setState(() {
       _loading = true;
       _error = null;
+      _info = null;
     });
     try {
       final repo = FirebaseAuthRepository(
         FirebaseAuth.instance,
         FirebaseFirestore.instance,
       );
-      if (_isRegister) {
-        await repo.registerWithEmail(
-          _emailCtrl.text,
-          _passwordCtrl.text,
-          _nameCtrl.text,
-        );
-      } else {
-        await repo.signInWithEmail(_emailCtrl.text, _passwordCtrl.text);
+      final user = _isRegister
+          ? await repo.registerWithEmail(
+              _emailCtrl.text,
+              _passwordCtrl.text,
+              _nameCtrl.text,
+            )
+          : await repo.signInWithEmail(_emailCtrl.text, _passwordCtrl.text);
+      if (isDefaultAdminEmail(user.email) && !user.emailVerified) {
+        if (mounted) {
+          setState(
+            () => _info =
+                'Verification email sent to ${user.email}. Verify your email first to activate your "admin" role, then continue.',
+          );
+        }
+        return;
       }
       if (mounted) context.go('/learners');
     } on FirebaseAuthException catch (e) {
@@ -65,12 +77,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Future<void> _submitGoogle() async {
     final firebaseReady = ref.read(firebaseReadyProvider);
     if (!firebaseReady) {
-      setState(() => _error = 'Configure Firebase first, or enter via a Demo Portal below.');
+      setState(
+        () => _error =
+            'Configure Firebase first, or enter via a Demo Portal below.',
+      );
       return;
     }
     setState(() {
       _loading = true;
       _error = null;
+      _info = null;
     });
     try {
       final repo = FirebaseAuthRepository(
@@ -89,15 +105,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void _enterDemo(PortalRole role) {
     ref.read(demoSessionProvider.notifier).state = AuthUser(
       uid: 'demo_${role.key}',
-      email: '${role.key}@scholaecs.edu',
+      email: switch (role) {
+        PortalRole.admin => defaultAdminEmail,
+        PortalRole.teacher => 'teacher@scholaecs.edu',
+        PortalRole.parent => 'parent@scholaecs.edu',
+      },
       displayName: switch (role) {
-        PortalRole.admin => 'Admin Demo',
+        PortalRole.admin => 'Default Admin',
         PortalRole.teacher => 'Amara Okafor',
         PortalRole.parent => 'Grace Mwangi',
       },
       role: role,
       teacherId: 'tch_amara',
       linkedLearnerIds: const ['lrn_01'],
+      emailVerified: true,
       isDemoMode: true,
     );
     context.go('/learners');
@@ -111,7 +132,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(maxWidth: 440),
             child: Container(
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
@@ -133,11 +154,56 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 4),
                   Text(
                     _isRegister
-                        ? 'Create a parent or staff account'
+                        ? 'Create an account with Email/Password'
                         : 'Sign in with Email/Password or Google',
                     style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Default Admin Account (role: "admin")',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E3A8A),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Sign in via Google or register & verify $defaultAdminEmail to automatically claim the "admin" role. Other accounts default to "parent".',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF1E40AF)),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton(
+                            onPressed: () {
+                              setState(() {
+                                _emailCtrl.text = defaultAdminEmail;
+                              });
+                            },
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            child: const Text(
+                              'Use $defaultAdminEmail',
+                              style: TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   if (_isRegister) ...[
                     TextField(
                       controller: _nameCtrl,
@@ -173,6 +239,35 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         fontSize: 12,
                         color: Color(0xFFDC2626),
                         fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                  if (_info != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _info!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF065F46),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextButton(
+                            onPressed: () => context.go('/learners'),
+                            child: const Text('Continue to Portal'),
+                          ),
+                        ],
                       ),
                     ),
                   ],

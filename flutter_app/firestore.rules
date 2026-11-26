@@ -2,97 +2,182 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
     function signedIn() {
       return request.auth != null;
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     function userDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    // Verified Default Admin bootstrap (prevents unverified email spoofing)
+    function isBootstrappedAdmin() {
+      return signedIn()
+        && request.auth.token.email == 'prelanadm@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
     function hasRole(role) {
-      return signedIn() && userDoc().role == role;
+      return signedIn() && userExists() && userDoc().role == role;
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || hasRole('admin');
     }
 
     function isStaff() {
-      return hasRole('admin') || hasRole('teacher');
+      return isAdmin() || hasRole('teacher');
     }
 
     function isParentOf(learnerId) {
-      return hasRole('parent') && learnerId in userDoc().linkedLearnerIds;
+      return hasRole('parent')
+        && userDoc().linkedLearnerIds is list
+        && learnerId in userDoc().linkedLearnerIds;
+    }
+
+    function isValidUserAccount(data) {
+      return data.keys().hasAll(['email', 'displayName', 'role', 'linkedLearnerIds'])
+        && data.keys().hasOnly([
+          'email',
+          'displayName',
+          'role',
+          'teacherId',
+          'linkedLearnerIds',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.email is string && data.email.size() <= 254
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.role in ['admin', 'teacher', 'parent']
+        && data.linkedLearnerIds is list && data.linkedLearnerIds.size() <= 25
+        && (data.linkedLearnerIds.size() == 0 || data.linkedLearnerIds[0] is string)
+        && (!('teacherId' in data) || data.teacherId == null || (data.teacherId is string && data.teacherId.size() <= 128));
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || hasRole('admin'));
-      allow write: if hasRole('admin') || (signedIn() && request.auth.uid == uid && !('role' in request.resource.data));
+      allow get: if isValidId(uid) && signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(uid) && signedIn() && isValidUserAccount(incoming()) && (
+        (request.auth.uid == uid && isBootstrappedAdmin() && incoming().role == 'admin')
+        || (request.auth.uid == uid && incoming().role == 'parent' && incoming().linkedLearnerIds.size() == 0)
+        || isAdmin()
+      );
+      allow update: if isValidId(uid) && signedIn() && isValidUserAccount(incoming()) && (
+        isAdmin()
+        || (
+          request.auth.uid == uid
+          && isBootstrappedAdmin()
+          && incoming().role == 'admin'
+          && incoming().linkedLearnerIds == existing().linkedLearnerIds
+          && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'displayName', 'email', 'updatedAt'])
+        )
+        || (
+          request.auth.uid == uid
+          && incoming().role == existing().role
+          && incoming().linkedLearnerIds == existing().linkedLearnerIds
+          && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'updatedAt'])
+        )
+      );
+      allow delete: if isValidId(uid) && isAdmin();
     }
 
     match /subjects/{docId} {
-      allow read: if signedIn();
-      allow write: if hasRole('admin');
+      allow get, list: if signedIn();
+      allow create, update, delete: if isValidId(docId) && isAdmin();
     }
 
     match /classrooms/{docId} {
-      allow read: if signedIn();
-      allow write: if hasRole('admin');
+      allow get, list: if signedIn();
+      allow create, update, delete: if isValidId(docId) && isAdmin();
+    }
+
+    match /teachers/{docId} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if isValidId(docId) && isAdmin();
     }
 
     match /learners/{learnerId} {
-      allow read: if isStaff() || isParentOf(learnerId);
-      allow write: if hasRole('admin');
+      allow get: if isValidId(learnerId) && (isStaff() || isParentOf(learnerId));
+      allow list: if isStaff() || (hasRole('parent') && resource.id in userDoc().linkedLearnerIds);
+      allow create, update, delete: if isValidId(learnerId) && isAdmin();
     }
 
     match /component_schemas/{schemaId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isStaff();
+      allow get, list: if signedIn();
+      allow create, update, delete: if isValidId(schemaId) && isAdmin();
     }
 
     match /page_widgets/{widgetId} {
-      allow read: if signedIn();
-      allow write: if hasRole('admin');
+      allow get, list: if signedIn();
+      allow create, update, delete: if isValidId(widgetId) && isAdmin();
     }
 
     match /scheme_strands/{strandId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isStaff();
+      allow get, list: if signedIn();
+      allow create, update: if isValidId(strandId) && isStaff();
+      allow delete: if isValidId(strandId) && isAdmin();
     }
 
     match /scheme_substrands/{substrandId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isStaff();
+      allow get, list: if signedIn();
+      allow create, update: if isValidId(substrandId) && isStaff();
+      allow delete: if isValidId(substrandId) && isAdmin();
     }
 
     match /diary_entries/{entryId} {
-      allow read: if isStaff() || isParentOf(resource.data.learnerId);
-      allow create: if isStaff();
-      allow update: if isStaff() || (
-        isParentOf(resource.data.learnerId) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentAcknowledged', 'updatedAt'])
+      allow get, list: if isStaff() || isParentOf(resource.data.learnerId);
+      allow create: if isValidId(entryId) && isStaff();
+      allow update: if isValidId(entryId) && (
+        isStaff() || (
+          isParentOf(resource.data.learnerId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['parentAcknowledged', 'updatedAt'])
+        )
       );
-      allow delete: if hasRole('admin');
+      allow delete: if isValidId(entryId) && isAdmin();
     }
 
     match /assessment_entries/{entryId} {
-      allow read: if isStaff() || isParentOf(resource.data.learnerId);
-      allow create, update: if isStaff();
-      allow delete: if hasRole('admin');
+      allow get, list: if isStaff() || isParentOf(resource.data.learnerId);
+      allow create, update: if isValidId(entryId) && isStaff();
+      allow delete: if isValidId(entryId) && isAdmin();
     }
 
     match /lesson_plans/{planId} {
-      allow read: if isStaff();
-      allow create, update: if isStaff();
-      allow delete: if hasRole('admin');
+      allow get, list: if isStaff();
+      allow create, update: if isValidId(planId) && isStaff();
+      allow delete: if isValidId(planId) && isAdmin();
     }
 
     match /timetable_slots/{slotId} {
-      allow read: if signedIn();
-      allow write: if hasRole('admin');
+      allow get, list: if signedIn();
+      allow create, update, delete: if isValidId(slotId) && isAdmin();
     }
 
     match /attendance_records/{recordId} {
-      allow read: if isStaff() || isParentOf(resource.data.learnerId);
-      allow create, update: if isStaff();
-      allow delete: if hasRole('admin');
+      allow get, list: if isStaff() || isParentOf(resource.data.learnerId);
+      allow create, update: if isValidId(recordId) && isStaff();
+      allow delete: if isValidId(recordId) && isAdmin();
     }
   }
 }

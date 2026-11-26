@@ -2,17 +2,17 @@
   "entities": {
     "UserAccount": {
       "title": "UserAccount",
-      "description": "Authenticated user identity and role assignment for Admin, Teacher, or Parent.",
+      "description": "Authenticated user identity and role assignment for Admin, Teacher, or Parent. Default admin email auto-claims admin once verified.",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
         "email": { "type": "string", "format": "email", "maxLength": 254 },
         "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
         "role": { "type": "string", "enum": ["admin", "teacher", "parent"] },
-        "classroomIds": { "type": "array" },
-        "learnerIds": { "type": "array" }
+        "teacherId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "linkedLearnerIds": { "type": "array" }
       },
-      "required": ["uid", "email", "displayName", "role"]
+      "required": ["uid", "email", "displayName", "role", "linkedLearnerIds"]
     },
     "DynamicFieldSchema": {
       "title": "DynamicFieldSchema",
@@ -21,9 +21,10 @@
       "properties": {
         "key": { "type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 64 },
         "label": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "targetEntityType": { "type": "string", "enum": ["diary_entry", "assessment_entry", "lesson_plan", "attendance_record", "scheme_substrand"] },
+        "targetEntityType": { "type": "string", "enum": ["learner", "diary_entry", "scheme_strand", "scheme_substrand", "assessment_entry", "lesson_plan", "timetable_slot", "attendance_record"] },
         "fieldType": { "type": "string", "enum": ["text", "number", "boolean", "select", "date"] },
         "required": { "type": "boolean" },
+        "archived": { "type": "boolean" },
         "visibleTo": { "type": "array" },
         "editableBy": { "type": "array" }
       },
@@ -122,6 +123,38 @@
         "customFields": { "type": "object" }
       },
       "required": ["learnerId", "classroomId", "teacherId", "date", "status"]
+    },
+    "TimetableSlot": {
+      "title": "TimetableSlot",
+      "description": "Weekly period slot validated against classroom, teacher, and room conflicts.",
+      "type": "object",
+      "properties": {
+        "classroomId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "subjectId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "teacherId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "day": { "type": "string", "enum": ["Mon", "Tue", "Wed", "Thu", "Fri"] },
+        "period": { "type": "integer" },
+        "timeRange": { "type": "string", "maxLength": 64 },
+        "room": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["classroomId", "subjectId", "teacherId", "day", "period", "timeRange", "room"]
+    },
+    "Learner": {
+      "title": "Learner",
+      "description": "Enrolled student entity with longitudinal profile and dynamic customFields.",
+      "type": "object",
+      "properties": {
+        "admissionNo": { "type": "string", "maxLength": 32 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "classroomId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "registeredAt": { "type": "string", "format": "date", "maxLength": 20 },
+        "enrollmentStatus": { "type": "string", "maxLength": 40 },
+        "parentName": { "type": "string", "maxLength": 120 },
+        "guardianPhone": { "type": "string", "maxLength": 40 },
+        "internalHealthNote": { "type": "string", "maxLength": 500 },
+        "customFields": { "type": "object" }
+      },
+      "required": ["admissionNo", "name", "classroomId", "registeredAt", "enrollmentStatus"]
     }
   },
   "firestore": {
@@ -129,9 +162,29 @@
       "schema": { "$ref": "#/entities/UserAccount" },
       "description": "User profiles and server-enforced portal roles."
     },
+    "/subjects/{subjectId}": {
+      "schema": { "type": "object" },
+      "description": "Curriculum subjects."
+    },
+    "/classrooms/{classroomId}": {
+      "schema": { "type": "object" },
+      "description": "School classrooms and grade levels."
+    },
+    "/teachers/{teacherId}": {
+      "schema": { "type": "object" },
+      "description": "Teacher profiles and subject assignments."
+    },
+    "/learners/{learnerId}": {
+      "schema": { "$ref": "#/entities/Learner" },
+      "description": "Student roster scoped by role and guardian links."
+    },
     "/component_schemas/{schemaId}": {
       "schema": { "$ref": "#/entities/DynamicFieldSchema" },
-      "description": "Runtime ECS field definitions across modules."
+      "description": "Runtime ECS field definitions across modules with safe archiving."
+    },
+    "/page_widgets/{widgetId}": {
+      "schema": { "type": "object" },
+      "description": "Role-aligned Learner Profile page widget composition."
     },
     "/scheme_strands/{strandId}": {
       "schema": { "$ref": "#/entities/SchemeStrand" },
@@ -152,6 +205,10 @@
     "/lesson_plans/{planId}": {
       "schema": { "$ref": "#/entities/LessonPlan" },
       "description": "Lesson delivery records driving Admin syllabus coverage."
+    },
+    "/timetable_slots/{slotId}": {
+      "schema": { "$ref": "#/entities/TimetableSlot" },
+      "description": "Weekly timetable slots."
     },
     "/attendance_records/{recordId}": {
       "schema": { "$ref": "#/entities/AttendanceRecord" },

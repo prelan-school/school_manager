@@ -201,4 +201,167 @@ class LearnerLongitudinalSystem {
       timeline: timeline,
     );
   }
+
+  static List<SubjectMasterySeries> computeSubjectProgression(
+    SchoolEcsState state,
+    String learnerId,
+    String fromDate,
+    String toDate,
+  ) {
+    final assessments = state.assessments
+        .where((a) =>
+            a.learnerId == learnerId &&
+            a.date.compareTo(fromDate) >= 0 &&
+            a.date.compareTo(toDate) <= 0)
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    final bySubject = <String, List<AssessmentEntryEntity>>{};
+    for (final item in assessments) {
+      bySubject.putIfAbsent(item.subjectId, () => []).add(item);
+    }
+
+    final series = <SubjectMasterySeries>[];
+    for (final entry in bySubject.entries) {
+      final subj = state.subjects.where((s) => s.id == entry.key).firstOrNull;
+      final points = entry.value.map((a) {
+        final sub = state.substrands.where((s) => s.id == a.substrandId).firstOrNull;
+        return SubjectMasteryPoint(
+          date: a.date,
+          scorePercent: a.scorePercent,
+          mastery: a.mastery,
+          substrandLabel: sub != null ? '${sub.code} ${sub.title}' : a.substrandId,
+        );
+      }).toList();
+
+      final latestScore = points.last.scorePercent;
+      final delta = points.length >= 2 ? latestScore - points.first.scorePercent : 0;
+
+      series.add(
+        SubjectMasterySeries(
+          subjectId: entry.key,
+          subjectName: subj?.name ?? entry.key,
+          latestScore: latestScore,
+          delta: delta,
+          points: points,
+        ),
+      );
+    }
+    series.sort((a, b) => a.subjectName.compareTo(b.subjectName));
+    return series;
+  }
+}
+
+class SubjectMasteryPoint {
+  const SubjectMasteryPoint({
+    required this.date,
+    required this.scorePercent,
+    required this.mastery,
+    required this.substrandLabel,
+  });
+
+  final String date;
+  final int scorePercent;
+  final MasteryLevel mastery;
+  final String substrandLabel;
+}
+
+class SubjectMasterySeries {
+  const SubjectMasterySeries({
+    required this.subjectId,
+    required this.subjectName,
+    required this.latestScore,
+    required this.delta,
+    required this.points,
+  });
+
+  final String subjectId;
+  final String subjectName;
+  final int latestScore;
+  final int delta;
+  final List<SubjectMasteryPoint> points;
+}
+
+class LearnerReportFormatter {
+  const LearnerReportFormatter._();
+
+  static String toMarkdown(
+    SchoolEcsState state,
+    LearnerLongitudinalReport report,
+  ) {
+    final classroom = state.classrooms
+        .where((c) => c.id == report.learner.classroomId)
+        .firstOrNull;
+    final progression = LearnerLongitudinalSystem.computeSubjectProgression(
+      state,
+      report.learner.id,
+      report.fromDate,
+      report.toDate,
+    );
+
+    final buf = StringBuffer()
+      ..writeln('# ScholaECS Longitudinal Progress Report')
+      ..writeln()
+      ..writeln('**Learner:** ${report.learner.name} (${report.learner.admissionNo})')
+      ..writeln('**Classroom:** ${classroom?.name ?? report.learner.classroomId}')
+      ..writeln('**Guardian:** ${report.learner.parentName} (${report.learner.guardianPhone})')
+      ..writeln('**Period:** ${report.fromDate} to ${report.toDate}')
+      ..writeln()
+      ..writeln('## Summary Metrics')
+      ..writeln(
+        '- Average Assessment Score: ${report.averageScore != null ? '${report.averageScore}%' : 'N/A'}',
+      )
+      ..writeln(
+        '- Attendance Rate: ${report.attendanceRate != null ? '${report.attendanceRate}%' : 'N/A'}',
+      )
+      ..writeln('- Diary Entries: ${report.diary.length} (${report.awardsCount} awards)')
+      ..writeln();
+
+    if (progression.isNotEmpty) {
+      buf.writeln('## Subject Mastery Progression');
+      for (final s in progression) {
+        final deltaStr = s.delta == 0
+            ? '0%'
+            : (s.delta > 0 ? '+${s.delta}%' : '${s.delta}%');
+        final pts = s.points
+            .map((p) => '${p.date}: ${p.scorePercent}% (${p.mastery.label})')
+            .join(' -> ');
+        buf.writeln('- **${s.subjectName}** (Latest ${s.latestScore}%, Trend $deltaStr): $pts');
+      }
+      buf.writeln();
+    }
+
+    if (report.assessments.isNotEmpty) {
+      buf.writeln('## Assessments (${report.assessments.length})');
+      for (final a in report.assessments) {
+        final subj = state.subjects.where((s) => s.id == a.subjectId).firstOrNull;
+        final sub = state.substrands.where((s) => s.id == a.substrandId).firstOrNull;
+        buf.writeln(
+          '- ${a.date} | ${subj?.name ?? a.subjectId} (${sub?.code ?? ''}) | ${a.mastery.label} (${a.scorePercent}%) — ${a.performanceComment}',
+        );
+      }
+      buf.writeln();
+    }
+
+    if (report.diary.isNotEmpty) {
+      buf.writeln('## School Diary (${report.diary.length})');
+      for (final d in report.diary) {
+        buf.writeln(
+          '- ${d.date} | Homework: ${d.homeworkSummary}${d.teacherNote.isNotEmpty ? ' | Note: ${d.teacherNote}' : ''}',
+        );
+      }
+      buf.writeln();
+    }
+
+    if (report.attendance.isNotEmpty) {
+      buf.writeln('## Attendance (${report.attendance.length} logs)');
+      for (final r in report.attendance) {
+        buf.writeln(
+          '- ${r.date} | ${r.status.label}${r.remark.isNotEmpty ? ' — ${r.remark}' : ''}',
+        );
+      }
+    }
+
+    return buf.toString().trimRight();
+  }
 }

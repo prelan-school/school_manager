@@ -7,6 +7,7 @@ interface LearnersDirectoryModuleProps {
   state: SchoolECSState;
   role: Role;
   activeLearnerId: string;
+  linkedLearnerIds?: string[];
   onOpenLearnerPage: (learnerId: string) => void;
 }
 
@@ -14,6 +15,7 @@ export function LearnersDirectoryModule({
   state,
   role,
   activeLearnerId,
+  linkedLearnerIds,
   onOpenLearnerPage,
 }: LearnersDirectoryModuleProps) {
   const [search, setSearch] = useState('');
@@ -21,7 +23,11 @@ export function LearnersDirectoryModule({
 
   const scopedLearners =
     role === 'parent'
-      ? state.learners.filter((l) => l.id === activeLearnerId)
+      ? state.learners.filter((l) =>
+          linkedLearnerIds && linkedLearnerIds.length > 0
+            ? linkedLearnerIds.includes(l.id)
+            : l.id === activeLearnerId
+        )
       : state.learners.filter((l) => {
           const matchesClass =
             classroomFilter === 'all' || l.classroomId === classroomFilter;

@@ -2,5 +2,7 @@
   "name": "ScholaECS — Flutter School System Blueprint",
   "description": "An intensive architectural plan and interactive Entity-Component-System (ECS) prototype for a loosely coupled Flutter school platform spanning Admin, Teacher, and Parent portals.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
+import { CheckCheck, Plus } from 'lucide-react';
 import {
   getFieldsForEntity,
+  markClassroomAllPresent,
   updateLessonStatus,
   upsertAttendanceRecord,
+  upsertTimetableSlot,
 } from '../../ecs/engine';
 import type {
   AttendanceStatus,
@@ -31,6 +34,21 @@ export function TimetableModule({
     state.classrooms[0]?.id ?? ''
   );
   const [activeSlot, setActiveSlot] = useState<TimetableSlotEntity | null>(null);
+  const [showAddSlotDialog, setShowAddSlotDialog] = useState(false);
+  const [slotClassroomId, setSlotClassroomId] = useState(
+    state.classrooms[0]?.id ?? ''
+  );
+  const [slotSubjectId, setSlotSubjectId] = useState(
+    state.subjects[0]?.id ?? ''
+  );
+  const [slotTeacherId, setSlotTeacherId] = useState(
+    state.teachers[0]?.id ?? ''
+  );
+  const [slotDay, setSlotDay] = useState<Weekday>('Mon');
+  const [slotPeriod, setSlotPeriod] = useState(3);
+  const [slotTimeRange, setSlotTimeRange] = useState('09:40 - 10:25');
+  const [slotRoom, setSlotRoom] = useState('B2-04');
+  const [slotError, setSlotError] = useState<string | null>(null);
 
   const slots = state.timetableSlots.filter(
     (s) => s.classroomId === selectedClassroomId
@@ -51,6 +69,27 @@ export function TimetableModule({
 
   const canEdit = role === 'admin' || role === 'teacher';
 
+  const handleCreateSlot = (e: FormEvent) => {
+    e.preventDefault();
+    const res = upsertTimetableSlot(state, {
+      classroomId: slotClassroomId,
+      subjectId: slotSubjectId,
+      teacherId: slotTeacherId,
+      day: slotDay,
+      period: slotPeriod,
+      timeRange: slotTimeRange,
+      room: slotRoom,
+    });
+    if (res.error) {
+      setSlotError(res.error);
+      return;
+    }
+    setSlotError(null);
+    setShowAddSlotDialog(false);
+    setSelectedClassroomId(slotClassroomId);
+    onStateChange(res.state);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
@@ -59,22 +98,38 @@ export function TimetableModule({
             Weekly Timetable
           </h2>
           <p className="mt-0.5 text-sm text-slate-600">
-            Click any period slot to inspect or update its linked Lesson Plan and syllabus coverage status in a dialog.
+            Click any period slot to inspect or update its linked Lesson Plan. Overlapping classrooms, teachers, or rooms are blocked automatically.
           </p>
         </div>
 
-        <select
-          aria-label="Filter timetable by classroom"
-          value={selectedClassroomId}
-          onChange={(e) => setSelectedClassroomId(e.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-700 focus:outline-none"
-        >
-          {state.classrooms.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Filter timetable by classroom"
+            value={selectedClassroomId}
+            onChange={(e) => setSelectedClassroomId(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-700 focus:outline-none"
+          >
+            {state.classrooms.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {role === 'admin' && (
+            <button
+              type="button"
+              onClick={() => {
+                setSlotClassroomId(selectedClassroomId);
+                setSlotError(null);
+                setShowAddSlotDialog(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-800 whitespace-nowrap shrink-0"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              Add Timetable Slot
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
@@ -229,6 +284,176 @@ export function TimetableModule({
           </p>
         )}
       </AppDialog>
+
+      {/* Admin Add Timetable Slot Dialog with Conflict Detection */}
+      <AppDialog
+        open={showAddSlotDialog}
+        title="Schedule Timetable Slot"
+        subtitle="Validates against classroom, teacher, and room conflicts for the selected day and period."
+        onClose={() => setShowAddSlotDialog(false)}
+      >
+        <form onSubmit={handleCreateSlot} className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="tt-classroom"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Classroom
+              </label>
+              <select
+                id="tt-classroom"
+                value={slotClassroomId}
+                onChange={(e) => setSlotClassroomId(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              >
+                {state.classrooms.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="tt-subject"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Subject
+              </label>
+              <select
+                id="tt-subject"
+                value={slotSubjectId}
+                onChange={(e) => setSlotSubjectId(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              >
+                {state.subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label
+                htmlFor="tt-teacher"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Teacher
+              </label>
+              <select
+                id="tt-teacher"
+                value={slotTeacherId}
+                onChange={(e) => setSlotTeacherId(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              >
+                {state.teachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="tt-day"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Weekday
+              </label>
+              <select
+                id="tt-day"
+                value={slotDay}
+                onChange={(e) => setSlotDay(e.target.value as Weekday)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              >
+                {DAYS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="tt-period"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Period #
+              </label>
+              <input
+                id="tt-period"
+                type="number"
+                min={1}
+                max={12}
+                value={slotPeriod}
+                onChange={(e) => setSlotPeriod(Number(e.target.value))}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm tabular-nums focus:border-blue-700 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="tt-time"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Time Range
+              </label>
+              <input
+                id="tt-time"
+                type="text"
+                value={slotTimeRange}
+                onChange={(e) => setSlotTimeRange(e.target.value)}
+                placeholder="09:40 - 10:25"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="tt-room"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Room
+              </label>
+              <input
+                id="tt-room"
+                type="text"
+                value={slotRoom}
+                onChange={(e) => setSlotRoom(e.target.value)}
+                placeholder="B2-04"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {slotError && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              {slotError}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowAddSlotDialog(false)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+            >
+              Save Timetable Slot
+            </button>
+          </div>
+        </form>
+      </AppDialog>
     </div>
   );
 }
@@ -255,6 +480,8 @@ export function ClassRegisterModule({
     state.classrooms[0]?.id ?? ''
   );
 
+  const [batchMessage, setBatchMessage] = useState<string | null>(null);
+
   const registerFields = getFieldsForEntity(state, 'attendance_record', role);
   const canEdit = role === 'admin' || role === 'teacher';
 
@@ -262,6 +489,19 @@ export function ClassRegisterModule({
     role === 'parent'
       ? state.learners.filter((l) => l.id === activeLearnerId)
       : state.learners.filter((l) => l.classroomId === selectedClassroomId);
+
+  const handleMarkAllPresent = () => {
+    const res = markClassroomAllPresent(state, {
+      classroomId: selectedClassroomId,
+      teacherId: activeTeacherId,
+      date,
+    });
+    if (!res.error) {
+      onStateChange(res.state);
+      setBatchMessage(`Marked ${res.count} learners present for ${date}.`);
+      setTimeout(() => setBatchMessage(null), 3000);
+    }
+  };
 
   const handleMark = (learnerId: string, status: AttendanceStatus) => {
     const existing = state.attendanceRecords.find(
@@ -314,11 +554,11 @@ export function ClassRegisterModule({
           <p className="mt-0.5 text-sm text-slate-600">
             {role === 'parent'
               ? 'Child attendance history. Internal staff flags are automatically hidden.'
-              : 'Fast daily roll call with role-scoped dynamic flags. Click any learner to open their longitudinal page.'}
+              : 'Fast daily roll call with one-tap Mark All Present and role-scoped dynamic flags.'}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {role !== 'parent' && (
             <select
               aria-label="Filter register by classroom"
@@ -340,8 +580,24 @@ export function ClassRegisterModule({
             onChange={(e) => setDate(e.target.value)}
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-700 focus:outline-none"
           />
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleMarkAllPresent}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-800 whitespace-nowrap shrink-0"
+            >
+              <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              Mark All Present
+            </button>
+          )}
         </div>
       </div>
+
+      {batchMessage && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-800">
+          {batchMessage}
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full border-collapse text-left text-sm">

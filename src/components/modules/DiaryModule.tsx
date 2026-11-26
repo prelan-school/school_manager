@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { CheckCircle2, Plus } from 'lucide-react';
+import { CheckCircle2, Megaphone, Plus } from 'lucide-react';
 import {
+  broadcastClassroomDiary,
   getFieldsForEntity,
   registerDynamicField,
   toggleDiaryAcknowledgment,
@@ -11,11 +12,15 @@ import type {
   SchoolECSState,
 } from '../../ecs/types';
 import { AppDialog } from '../AppDialog';
-import { DynamicFieldReadout } from '../DynamicFieldsRenderer';
+import {
+  DynamicFieldInputs,
+  DynamicFieldReadout,
+} from '../DynamicFieldsRenderer';
 
 interface DiaryModuleProps {
   state: SchoolECSState;
   role: Role;
+  activeTeacherId: string;
   activeLearnerId: string;
   onStateChange: (next: SchoolECSState) => void;
   onOpenDiaryDialog: (learnerId?: string) => void;
@@ -25,6 +30,7 @@ interface DiaryModuleProps {
 export function DiaryModule({
   state,
   role,
+  activeTeacherId,
   activeLearnerId,
   onStateChange,
   onOpenDiaryDialog,
@@ -37,7 +43,21 @@ export function DiaryModule({
   const [newFieldParentVisible, setNewFieldParentVisible] = useState(true);
   const [fieldError, setFieldError] = useState<string | null>(null);
 
-  const diaryFields = getFieldsForEntity(state, 'diary_entry', role);
+  const [showBroadcastDialog, setShowBroadcastDialog] = useState(false);
+  const [broadcastClassroomId, setBroadcastClassroomId] = useState(
+    state.classrooms[0]?.id ?? ''
+  );
+  const [broadcastDate, setBroadcastDate] = useState('2026-11-25');
+  const [broadcastHomework, setBroadcastHomework] = useState('');
+  const [broadcastNote, setBroadcastNote] = useState('');
+  const [broadcastCustomValues, setBroadcastCustomValues] = useState<
+    Record<string, string | number | boolean>
+  >({});
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
+  const [broadcastBanner, setBroadcastBanner] = useState<string | null>(null);
+
+  const activeDiaryFields = getFieldsForEntity(state, 'diary_entry', role, false);
+  const diaryReadoutFields = getFieldsForEntity(state, 'diary_entry', role, true);
 
   const visibleEntries =
     role === 'parent'
@@ -75,6 +95,33 @@ export function DiaryModule({
     onStateChange(res.state);
   };
 
+  const handleBroadcastSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const res = broadcastClassroomDiary(state, {
+      classroomId: broadcastClassroomId,
+      teacherId: activeTeacherId,
+      date: broadcastDate,
+      homeworkSummary: broadcastHomework,
+      teacherNote: broadcastNote,
+      customFields: broadcastCustomValues,
+      actorRole: role,
+    });
+    if (res.error) {
+      setBroadcastError(res.error);
+      return;
+    }
+    setBroadcastError(null);
+    setBroadcastHomework('');
+    setBroadcastNote('');
+    setBroadcastCustomValues({});
+    setShowBroadcastDialog(false);
+    setBroadcastBanner(
+      `Broadcasted diary entry to ${res.entries.length} learners.`
+    );
+    setTimeout(() => setBroadcastBanner(null), 3500);
+    onStateChange(res.state);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
@@ -85,7 +132,7 @@ export function DiaryModule({
           <p className="mt-0.5 text-sm text-slate-600">
             {role === 'parent'
               ? 'Child-scoped daily homework, teacher notes, dynamic awards, and parent acknowledgment.'
-              : 'Loosely coupled daily diary feed. Add custom ECS fields or log new entries via focused dialogs.'}
+              : 'Loosely coupled daily diary feed. Broadcast class homework or log individual learner entries via dialogs.'}
           </p>
         </div>
 
@@ -101,6 +148,17 @@ export function DiaryModule({
             </button>
             <button
               type="button"
+              onClick={() => {
+                setBroadcastError(null);
+                setShowBroadcastDialog(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-800 transition-colors hover:bg-blue-100 whitespace-nowrap shrink-0"
+            >
+              <Megaphone className="h-3.5 w-3.5" aria-hidden="true" />
+              Broadcast to Class
+            </button>
+            <button
+              type="button"
               onClick={() => onOpenDiaryDialog()}
               className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-800 whitespace-nowrap shrink-0"
             >
@@ -110,6 +168,123 @@ export function DiaryModule({
           </div>
         )}
       </div>
+
+      {broadcastBanner && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-800">
+          {broadcastBanner}
+        </div>
+      )}
+
+      {/* Class-Wide Broadcast Dialog */}
+      <AppDialog
+        open={showBroadcastDialog}
+        title="Broadcast Diary to Classroom"
+        subtitle="Assign homework once to every learner in the selected classroom."
+        onClose={() => setShowBroadcastDialog(false)}
+      >
+        <form onSubmit={handleBroadcastSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="broadcast-classroom"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Classroom
+              </label>
+              <select
+                id="broadcast-classroom"
+                value={broadcastClassroomId}
+                onChange={(e) => setBroadcastClassroomId(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              >
+                {state.classrooms.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="broadcast-date"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                Date
+              </label>
+              <input
+                id="broadcast-date"
+                type="date"
+                value={broadcastDate}
+                onChange={(e) => setBroadcastDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="broadcast-homework"
+              className="mb-1 block text-xs font-medium text-slate-700"
+            >
+              Class Homework Assignment *
+            </label>
+            <textarea
+              id="broadcast-homework"
+              rows={2}
+              value={broadcastHomework}
+              onChange={(e) => setBroadcastHomework(e.target.value)}
+              placeholder="e.g. Complete Fractions Mastery Sheet Q1-Q10..."
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="broadcast-note"
+              className="mb-1 block text-xs font-medium text-slate-700"
+            >
+              Shared Class Note
+            </label>
+            <input
+              id="broadcast-note"
+              type="text"
+              value={broadcastNote}
+              onChange={(e) => setBroadcastNote(e.target.value)}
+              placeholder="Reminder for all parents in this classroom..."
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-700 focus:outline-none"
+            />
+          </div>
+
+          <DynamicFieldInputs
+            fields={activeDiaryFields}
+            values={broadcastCustomValues}
+            role={role}
+            onChange={(key, val) =>
+              setBroadcastCustomValues((prev) => ({ ...prev, [key]: val }))
+            }
+          />
+
+          {broadcastError && (
+            <p className="text-xs font-medium text-red-600">{broadcastError}</p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowBroadcastDialog(false)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+            >
+              Broadcast to Classroom
+            </button>
+          </div>
+        </form>
+      </AppDialog>
 
       {/* Custom Field Dialog */}
       <AppDialog
@@ -289,7 +464,7 @@ export function DiaryModule({
                 )}
 
                 <DynamicFieldReadout
-                  fields={diaryFields}
+                  fields={diaryReadoutFields}
                   values={entry.customFields}
                   role={role}
                 />
