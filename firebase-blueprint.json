@@ -1,0 +1,161 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Authenticated user identity and role assignment for Admin, Teacher, or Parent.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["admin", "teacher", "parent"] },
+        "classroomIds": { "type": "array" },
+        "learnerIds": { "type": "array" }
+      },
+      "required": ["uid", "email", "displayName", "role"]
+    },
+    "DynamicFieldSchema": {
+      "title": "DynamicFieldSchema",
+      "description": "Runtime ECS field definition attached to any target entity type.",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 64 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "targetEntityType": { "type": "string", "enum": ["diary_entry", "assessment_entry", "lesson_plan", "attendance_record", "scheme_substrand"] },
+        "fieldType": { "type": "string", "enum": ["text", "number", "boolean", "select", "date"] },
+        "required": { "type": "boolean" },
+        "visibleTo": { "type": "array" },
+        "editableBy": { "type": "array" }
+      },
+      "required": ["key", "label", "targetEntityType", "fieldType", "visibleTo", "editableBy"]
+    },
+    "SchemeStrand": {
+      "title": "SchemeStrand",
+      "description": "Canonical curriculum strand owned by a subject and term.",
+      "type": "object",
+      "properties": {
+        "subjectId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "code": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "term": { "type": "string", "maxLength": 32 },
+        "createdByTeacherId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 }
+      },
+      "required": ["subjectId", "code", "title", "term"]
+    },
+    "SchemeSubstrand": {
+      "title": "SchemeSubstrand",
+      "description": "Canonical curriculum substrand under a strand, pulled by Assessments and Lesson Plans.",
+      "type": "object",
+      "properties": {
+        "strandId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "subjectId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "code": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "learningOutcome": { "type": "string", "maxLength": 500 },
+        "targetLessons": { "type": "integer" },
+        "customFields": { "type": "object" }
+      },
+      "required": ["strandId", "subjectId", "code", "title", "targetLessons"]
+    },
+    "DiaryEntry": {
+      "title": "DiaryEntry",
+      "description": "Daily school diary record with core homework and extensible dynamicComponents.",
+      "type": "object",
+      "properties": {
+        "learnerId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "classroomId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "teacherId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "date": { "type": "string", "format": "date", "maxLength": 20 },
+        "homeworkSummary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "teacherNote": { "type": "string", "maxLength": 1000 },
+        "parentAcknowledged": { "type": "boolean" },
+        "customFields": { "type": "object" }
+      },
+      "required": ["learnerId", "classroomId", "teacherId", "date", "homeworkSummary", "parentAcknowledged"]
+    },
+    "AssessmentEntry": {
+      "title": "AssessmentEntry",
+      "description": "Learner assessment pulling strandId and substrandId from Schemes without duplication.",
+      "type": "object",
+      "properties": {
+        "learnerId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "subjectId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "strandId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "substrandId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "teacherId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "mastery": { "type": "string", "enum": ["Exceeding", "Meeting", "Approaching", "Developing"] },
+        "scorePercent": { "type": "integer" },
+        "performanceComment": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "customFields": { "type": "object" }
+      },
+      "required": ["learnerId", "subjectId", "strandId", "substrandId", "teacherId", "mastery", "scorePercent", "performanceComment"]
+    },
+    "LessonPlan": {
+      "title": "LessonPlan",
+      "description": "Teacher lesson delivery entity linking TimetableSlot and SchemeSubstrand for Admin coverage tracking.",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "classroomId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "subjectId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "strandId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "substrandId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "timetableSlotId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "status": { "type": "string", "enum": ["planned", "in_progress", "taught"] },
+        "lessonsDelivered": { "type": "integer" },
+        "reflectionNote": { "type": "string", "maxLength": 1000 }
+      },
+      "required": ["teacherId", "classroomId", "subjectId", "strandId", "substrandId", "title", "status", "lessonsDelivered"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Daily class register record with role-scoped custom fields.",
+      "type": "object",
+      "properties": {
+        "learnerId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "classroomId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "teacherId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "date": { "type": "string", "format": "date", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["present", "late", "absent", "excused"] },
+        "remark": { "type": "string", "maxLength": 500 },
+        "customFields": { "type": "object" }
+      },
+      "required": ["learnerId", "classroomId", "teacherId", "date", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "User profiles and server-enforced portal roles."
+    },
+    "/component_schemas/{schemaId}": {
+      "schema": { "$ref": "#/entities/DynamicFieldSchema" },
+      "description": "Runtime ECS field definitions across modules."
+    },
+    "/scheme_strands/{strandId}": {
+      "schema": { "$ref": "#/entities/SchemeStrand" },
+      "description": "Canonical curriculum strands."
+    },
+    "/scheme_substrands/{substrandId}": {
+      "schema": { "$ref": "#/entities/SchemeSubstrand" },
+      "description": "Canonical curriculum substrands referenced by Assessments and Lesson Plans."
+    },
+    "/diary_entries/{entryId}": {
+      "schema": { "$ref": "#/entities/DiaryEntry" },
+      "description": "Daily diary logs with dynamic fields like awards."
+    },
+    "/assessment_entries/{assessmentId}": {
+      "schema": { "$ref": "#/entities/AssessmentEntry" },
+      "description": "Learner assessments referencing Scheme strands and substrands."
+    },
+    "/lesson_plans/{planId}": {
+      "schema": { "$ref": "#/entities/LessonPlan" },
+      "description": "Lesson delivery records driving Admin syllabus coverage."
+    },
+    "/attendance_records/{recordId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Daily class register entries."
+    }
+  }
+}

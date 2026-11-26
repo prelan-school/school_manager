@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return signedIn() && userDoc().role == role;
+    }
+
+    function isStaff() {
+      return hasRole('admin') || hasRole('teacher');
+    }
+
+    function isParentOf(learnerId) {
+      return hasRole('parent') && learnerId in userDoc().linkedLearnerIds;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || hasRole('admin'));
+      allow write: if hasRole('admin') || (signedIn() && request.auth.uid == uid && !('role' in request.resource.data));
+    }
+
+    match /subjects/{docId} {
+      allow read: if signedIn();
+      allow write: if hasRole('admin');
+    }
+
+    match /classrooms/{docId} {
+      allow read: if signedIn();
+      allow write: if hasRole('admin');
+    }
+
+    match /learners/{learnerId} {
+      allow read: if isStaff() || isParentOf(learnerId);
+      allow write: if hasRole('admin');
+    }
+
+    match /component_schemas/{schemaId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /page_widgets/{widgetId} {
+      allow read: if signedIn();
+      allow write: if hasRole('admin');
+    }
+
+    match /scheme_strands/{strandId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /scheme_substrands/{substrandId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /diary_entries/{entryId} {
+      allow read: if isStaff() || isParentOf(resource.data.learnerId);
+      allow create: if isStaff();
+      allow update: if isStaff() || (
+        isParentOf(resource.data.learnerId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentAcknowledged', 'updatedAt'])
+      );
+      allow delete: if hasRole('admin');
+    }
+
+    match /assessment_entries/{entryId} {
+      allow read: if isStaff() || isParentOf(resource.data.learnerId);
+      allow create, update: if isStaff();
+      allow delete: if hasRole('admin');
+    }
+
+    match /lesson_plans/{planId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if hasRole('admin');
+    }
+
+    match /timetable_slots/{slotId} {
+      allow read: if signedIn();
+      allow write: if hasRole('admin');
+    }
+
+    match /attendance_records/{recordId} {
+      allow read: if isStaff() || isParentOf(resource.data.learnerId);
+      allow create, update: if isStaff();
+      allow delete: if hasRole('admin');
+    }
+  }
+}
